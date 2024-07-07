@@ -149,6 +149,10 @@ Token lex_any(Lexer *lexer)
 			return emit(lexer, TOKEN_STAR);
 		case ';':
 			return emit(lexer, TOKEN_SEMICOLON);
+		case '(':
+			return emit(lexer, TOKEN_LPAREN);
+		case ')':
+			return emit(lexer, TOKEN_RPAREN);
 
 		default: {
 			if (is_numeric(c)) {

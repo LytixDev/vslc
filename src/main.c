@@ -53,6 +53,16 @@ int main(int argc, char **argv)
 	}
 	fclose(fp);
 
-	AstExpr *head = parse(input);
-	ast_print(head, 0);
+	ParseResult res = parse(input);
+	ParseError *parse_error = res.err_head;
+	for (u32 i = 0; i < res.n_errors; i++) {
+		char *msg = parse_error->msg;
+		if (msg == NULL) {
+			msg = PARSE_ERROR_MSGS[parse_error->type];
+		}
+		fprintf(stderr, "[%i] %s\n", i + 1, msg);
+	}
+	ast_print(res.head, 0);
+
+	free(input);
 }

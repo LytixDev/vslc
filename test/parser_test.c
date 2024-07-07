@@ -67,6 +67,6 @@ void test_binary_precedence(void)
 	expected.right = (AstExpr *)&right;
 	expected.left = (AstExpr *)&left;
 
-	AstExpr *output = parse(input);
-	assert(ast_cmp((AstExpr *)&expected, output));
+	ParseResult result = parse(input);
+	assert(ast_cmp((AstExpr *)&expected, result.head));
 }

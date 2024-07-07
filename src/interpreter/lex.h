@@ -17,7 +17,6 @@
 #ifndef LEX_H
 #define LEX_H
 
-#include "base/sac_single.h"
 #include "base/str.h"
 #include "base/types.h"
 
@@ -27,9 +26,14 @@ typedef struct {
 } Point;
 
 typedef enum {
-	TOKEN_NUM = 0,
+	TOKEN_ERR = 0,
+	TOKEN_NUM,
 	TOKEN_PLUS,
 	TOKEN_STAR,
+
+	TOKEN_LPAREN,
+	TOKEN_RPAREN,
+
 	TOKEN_SEMICOLON,
 	TOKEN_EOF,
 	TOKEN_TYPE_LEN,
@@ -58,9 +62,7 @@ struct lexer_t {
 	u32 pos_current;
 	Point start; // Start point of the current token being processed
 	Point current; // Current point in the input
-
 	StateFn state;
-	Arena arena;
 };
 
 

@@ -14,105 +14,60 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "parser.h"
+#include <string.h>
+
 #include "ast.h"
+#include "base/base.h"
 #include "base/sac_single.h"
 #include "lex.h"
-
-u32 prev_pri = 0;
+#include "parser.h"
 
 TokenType token_precedences[TOKEN_TYPE_LEN] = {
+	0, /* TOKEN_ERR */
 	1, /* TOKEN_NUM */
 	10, /* TOKEN_PLUS */
 	20, /* TOKEN_STAR */
+	0, /* TOKEN_LPAREN */
+	0, /* TOKEN_RPAREN */
 	1, /* TOKEN_SEMICOLON */
 	1, /* TOKEN_EOF */
 };
 
+static AstExpr *parse_expr(Parser *parser, u32 precedence);
 
-#if 0
-
-static AstExprBinary *rearange(AstExprBinary *expr)
+static ParseError *make_parse_error(Arena *arena, Token *failed, ParseErrorType pet, char *msg)
 {
-    assert(expr->right->type == EXPR_BINARY);
+	ParseError *parse_error = m_arena_alloc(arena, sizeof(ParseError));
+	if (msg != NULL) {
+		size_t msg_len = strlen(msg) + 1; // TODO: avoid strlen?
+		parse_error->msg = m_arena_alloc(arena, msg_len);
+		memcpy(parse_error->msg, msg, msg_len);
+	} else {
+		parse_error->msg = NULL;
+	}
 
-    /*
-     *   OP
-     *  / \
-     * L  OP2
-     *   /  \
-     *  L2   R
-     *
-     *  becomes:
-     *
-     *     OP2
-     *    /  \
-     *   OP   R
-     *  / \
-     * L  L2
-     */
-
-    AstExprBinary *right = (AstExprBinary *)expr->right;
-    expr->right = right->left;
-    AstExprBinary *new_root = right;
-    new_root->left = (AstExpr *)expr;
-    return new_root;
+	parse_error->type = pet;
+	parse_error->failed = failed;
+	parse_error->next = NULL;
+	return parse_error;
 }
 
-static AstExpr *single_token_to_expr(Lexer *lexer, Token token)
+static void parse_error_append(Parser *parser, Token *failed, ParseErrorType pet, char *msg)
 {
-     if (token.type == TOKEN_NUM) {
-         AstExprLiteral *literal = m_arena_alloc(&lexer->arena, sizeof(AstExprLiteral));
-         literal->type = EXPR_LITERAL;
-         literal->lit_type = LIT_NUM;
-         literal->num_value = token.num_value;
-         return (AstExpr *)literal;
-    }
+	ParseError *parse_error = make_parse_error(&parser->arena, failed, pet, msg);
+	if (parser->err_head == NULL) {
+		parser->err_head = parse_error;
+	} else {
+		parser->err_tail->next = parse_error;
+	}
+	parser->err_tail = parse_error;
 
-     ASSERT_NOT_REACHED;
+	parser->n_errors++;
 }
 
-static AstExpr *parse_expr(Lexer *lexer)
+static AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
 {
-    Token first_token = get_next_token(lexer);
-    AstExpr *expr = single_token_to_expr(lexer, first_token);
-    Token current_token = get_next_token(lexer);
-    u32 current_pri = token_priorities[current_token.type];
-
-    switch (current_token.type) {
-        case TOKEN_SEMICOLON: {
-            return expr;
-        }
-        case TOKEN_PLUS:
-        case TOKEN_STAR: {
-            prev_pri = current_pri;
-            /* Binary expression */
-            AstExprBinary *binary = m_arena_alloc(&lexer->arena, sizeof(AstExprBinary));
-            binary->type = EXPR_BINARY;
-            binary->op = current_token.type;
-            binary->left = expr;
-            binary->right = parse_expr(lexer);
-            
-            if (current_pri > prev_pri) {
-                binary = rearange(binary);
-            }
-
-            return (AstExpr *)binary;
-        }
-        default: {
-        }
-    }
-    ASSERT_NOT_REACHED;
-}
-#endif
-
-
-static AstExpr *parse_expr(Lexer *lexer, u32 precedence);
-
-
-static AstExprBinary *make_binary(Lexer *lexer, AstExpr *left, TokenType op, AstExpr *right)
-{
-	AstExprBinary *binary = m_arena_alloc(&lexer->arena, sizeof(AstExprBinary));
+	AstExprBinary *binary = m_arena_alloc(arena, sizeof(AstExprBinary));
 	binary->type = EXPR_BINARY;
 	binary->op = op;
 	binary->left = left;
@@ -120,13 +75,13 @@ static AstExprBinary *make_binary(Lexer *lexer, AstExpr *left, TokenType op, Ast
 	return binary;
 }
 
-static AstExprLiteral *make_literal(Lexer *lexer, Token token)
+static AstExprLiteral *make_literal(Arena *arena, Token token)
 {
-    AstExprLiteral *literal = m_arena_alloc(&lexer->arena, sizeof(AstExprLiteral));
-    literal->type = EXPR_LITERAL;
-    literal->lit_type = LIT_NUM;
-    literal->num_value = token.num_value;
-    return literal;
+	AstExprLiteral *literal = m_arena_alloc(arena, sizeof(AstExprLiteral));
+	literal->type = EXPR_LITERAL;
+	literal->lit_type = LIT_NUM;
+	literal->num_value = token.num_value;
+	return literal;
 }
 
 
@@ -141,15 +96,38 @@ static bool is_bin_op(Token token)
 	}
 }
 
-static AstExpr *parse_primary(Lexer *lexer)
+static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
 {
-	Token token = lex_advance(lexer);
-    return (AstExpr *)make_literal(lexer, token);
+	Token token = lex_advance(&parser->lexer);
+	if (token.type != expected) {
+		parse_error_append(parser, &token, pet, NULL);
+		return (Token){ .type = TOKEN_ERR };
+	}
+	return token;
 }
 
-static AstExpr *parse_increasing_precedence(Lexer *lexer, AstExpr *left, u32 precedence)
+static AstExpr *parse_primary(Parser *parser)
 {
-	Token next = lex_peek(lexer, 1);
+	Token token = lex_advance(&parser->lexer);
+	switch (token.type) {
+	case TOKEN_LPAREN: {
+		AstExpr *expr = parse_expr(parser, 0);
+		Token err = consume_or_err(parser, TOKEN_RPAREN, PET_EXPECTED_RPAREN);
+		if (err.type == TOKEN_ERR) {
+			// TODO: gracefully continue
+		}
+		return expr;
+	}
+	case TOKEN_NUM:
+		return (AstExpr *)make_literal(&parser->arena, token);
+	default:
+		ASSERT_NOT_REACHED;
+	}
+}
+
+static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 precedence)
+{
+	Token next = lex_peek(&parser->lexer, 1);
 	if (!is_bin_op(next))
 		return left;
 
@@ -157,17 +135,17 @@ static AstExpr *parse_increasing_precedence(Lexer *lexer, AstExpr *left, u32 pre
 	if (precedence >= next_precedence)
 		return left;
 
-	lex_advance(lexer);
-	AstExpr *right = parse_expr(lexer, next_precedence);
-	return (AstExpr *)make_binary(lexer, left, next.type, right);
+	lex_advance(&parser->lexer);
+	AstExpr *right = parse_expr(parser, next_precedence);
+	return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
 }
 
-static AstExpr *parse_expr(Lexer *lexer, u32 precedence)
+static AstExpr *parse_expr(Parser *parser, u32 precedence)
 {
-	AstExpr *left = parse_primary(lexer);
+	AstExpr *left = parse_primary(parser);
 	AstExpr *expr;
 	while (1) {
-		expr = parse_increasing_precedence(lexer, left, precedence);
+		expr = parse_increasing_precedence(parser, left, precedence);
 		if (expr == left) // pointer comparison
 			break;
 
@@ -177,10 +155,8 @@ static AstExpr *parse_expr(Lexer *lexer, u32 precedence)
 	return left;
 }
 
-AstExpr *parse(char *input)
+ParseResult parse(char *input)
 {
-	Arena lexer_arena;
-	m_arena_init_dynamic(&lexer_arena, 2, 512);
 	Lexer lexer = {
 		.had_error = false,
 		.input = input,
@@ -189,8 +165,20 @@ AstExpr *parse(char *input)
 		.start = (Point){ 0 },
 		.current = (Point){ 0 },
 		.state = lex_any,
-		.arena = lexer_arena,
 	};
+	Parser parser = {
+		.lexer = lexer,
+		.n_errors = 0,
+		.err_head = NULL,
+		.err_tail = NULL,
+	};
+	m_arena_init_dynamic(&parser.arena, 2, 512);
 
-	return parse_expr(&lexer, 0);
+	AstExpr *head = parse_expr(&parser, 0);
+
+	return (ParseResult){
+		.n_errors = parser.n_errors,
+		.err_head = parser.err_head,
+		.head = head,
+	};
 }
