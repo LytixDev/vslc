@@ -17,16 +17,16 @@
 #ifndef STR_H
 #define STR_H
 
-#include "types.h"
 #include "sac_single.h"
+#include "types.h"
 
-/* 
+/*
  * Should always be null terminated.
  * Size does not include null terminator.
  */
 typedef struct {
-    size_t size;
-    u8 *str;
+	size_t size;
+	u8 *str;
 } Str8;
 
 /*

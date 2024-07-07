@@ -17,8 +17,8 @@
 #ifndef AST_H
 #define AST_H
 
-#include "base/types.h"
 #include "base/str.h"
+#include "base/types.h"
 #include "lex.h"
 
 typedef enum {
@@ -28,8 +28,8 @@ typedef enum {
 } AstExprType;
 
 typedef enum {
-    LIT_STR,
-    LIT_NUM,
+	LIT_STR,
+	LIT_NUM,
 } LiteralType;
 
 typedef struct expr_t {
@@ -37,19 +37,19 @@ typedef struct expr_t {
 } AstExpr;
 
 typedef struct {
-    AstExprType type;
-    LiteralType lit_type;
-    union {
-        Str8 str_value;
-        f64 num_value;
-    };
+	AstExprType type;
+	LiteralType lit_type;
+	union {
+		Str8 str_value;
+		f64 num_value;
+	};
 } AstExprLiteral;
 
 typedef struct {
-    AstExprType type;
-    AstExpr *left;
-    TokenType op;
-    AstExpr *right;
+	AstExprType type;
+	AstExpr *left;
+	TokenType op;
+	AstExpr *right;
 } AstExprBinary;
 
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))

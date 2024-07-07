@@ -26,33 +26,33 @@
 
 int main(int argc, char **argv)
 {
-    if (argc != 2) {
-        fprintf(stderr, "Expected filename argument");
-        return 1;
-    }
+	if (argc != 2) {
+		fprintf(stderr, "Expected filename argument");
+		return 1;
+	}
 
-    /* Read input file */
-    char *file_path = argv[1];
-    struct stat st;
-    if (stat(file_path, &st) != 0) {
-        fprintf(stderr, "Could not stat file '%s'\n", file_path);
-        return 1;
-    }
+	/* Read input file */
+	char *file_path = argv[1];
+	struct stat st;
+	if (stat(file_path, &st) != 0) {
+		fprintf(stderr, "Could not stat file '%s'\n", file_path);
+		return 1;
+	}
 
-    size_t input_size = st.st_size;
-    char *input = malloc(sizeof(char) * (input_size + 1));
-    input[input_size] = 0;
-    FILE *fp = fopen(file_path, "r");
-    if (fp == NULL) {
-        fprintf(stderr, "Could not open file '%s'\n", file_path);
-        return 1;
-    }
-    if (fread(input, sizeof(char), st.st_size, fp) != input_size) {
-        fprintf(stderr, "Could not read file '%s'\n", file_path);
-        return 1;
-    }
-    fclose(fp);
+	size_t input_size = st.st_size;
+	char *input = malloc(sizeof(char) * (input_size + 1));
+	input[input_size] = 0;
+	FILE *fp = fopen(file_path, "r");
+	if (fp == NULL) {
+		fprintf(stderr, "Could not open file '%s'\n", file_path);
+		return 1;
+	}
+	if (fread(input, sizeof(char), st.st_size, fp) != input_size) {
+		fprintf(stderr, "Could not read file '%s'\n", file_path);
+		return 1;
+	}
+	fclose(fp);
 
-    AstExpr *head = parse(input);
-    ast_print(head, 0);
+	AstExpr *head = parse(input);
+	ast_print(head, 0);
 }

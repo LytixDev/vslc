@@ -18,62 +18,56 @@
 #define LEX_H
 
 #include "base/sac_single.h"
-#include "base/types.h"
 #include "base/str.h"
+#include "base/types.h"
 
 typedef struct {
-    u32 l; // Line
-    u32 c; // Column
+	u32 l; // Line
+	u32 c; // Column
 } Point;
 
 typedef enum {
-    TOKEN_NUM = 0,
-    TOKEN_PLUS,
-    TOKEN_STAR,
-    TOKEN_SEMICOLON,
-    TOKEN_EOF,
-    TOKEN_TYPE_LEN,
+	TOKEN_NUM = 0,
+	TOKEN_PLUS,
+	TOKEN_STAR,
+	TOKEN_SEMICOLON,
+	TOKEN_EOF,
+	TOKEN_TYPE_LEN,
 } TokenType;
 
 typedef struct {
-    TokenType type;
-    Point start;
-    Point end;
-    StrView8 lexeme;
+	TokenType type;
+	Point start;
+	Point end;
+	StrView8 lexeme;
 
-    union {
-        Str8 str_value;
-        f64 num_value;
-    };
+	union {
+		Str8 str_value;
+		f64 num_value;
+	};
 } Token;
 
 typedef struct lexer_t Lexer;
-
-//typedef struct {
-//} StateFn;
-
 typedef Token (*StateFn)(Lexer *);
 
 // TODO: should also keep track of the position of each newline
 struct lexer_t {
-    bool had_error;
+	bool had_error;
 	char *input; // The input string being scanned.
-    u32 pos_start;
-    u32 pos_current;
-    Point start; // Start point of the current token being processed
-    Point current; // Current point in the input
+	u32 pos_start;
+	u32 pos_current;
+	Point start; // Start point of the current token being processed
+	Point current; // Current point in the input
 
-    StateFn state;
-    Arena arena;
+	StateFn state;
+	Arena arena;
 };
-
 
 
 Token lex_any(Lexer *lexer);
 
-Token get_next_token(Lexer *lexer);
-Token peek_token(Lexer *lexer, u32 lookahead);
-
+Token lex_advance(Lexer *lexer);
+Token lex_peek(Lexer *lexer, u32 lookahead);
 
 
 #endif /* LEX_H */

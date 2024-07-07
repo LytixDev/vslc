@@ -21,9 +21,8 @@
 // #include "lex.h"
 
 
-
 typedef struct {
-    char *input;
+	char *input;
 } Parser;
 
 // Return the first node of the tree

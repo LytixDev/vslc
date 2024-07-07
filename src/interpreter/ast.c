@@ -14,32 +14,32 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include <stdio.h>
 #include "ast.h"
+#include <stdio.h>
 
 
 void ast_print(AstExpr *head, u32 indent)
 {
-    putchar('\n');
-    for (u32 i = 0; i < indent; i++) {
-        putchar(' ');
-    }
+	putchar('\n');
+	for (u32 i = 0; i < indent; i++) {
+		putchar(' ');
+	}
 
-    switch (head->type) {
-        case EXPR_LITERAL:
-            printf("%f", AS_LITERAL(head)->num_value);
-            break;
-        case EXPR_BINARY: {
-            AstExprBinary *binary = AS_BINARY(head);
-            if (binary->op == TOKEN_PLUS)
-                printf("+");
-            else
-                printf("*");
-            ast_print(binary->left, indent + 1);
-            ast_print(binary->right, indent + 1);
-            break;
-        }
-        default:
-            break;
-    }
+	switch (head->type) {
+	case EXPR_LITERAL:
+		printf("%f", AS_LITERAL(head)->num_value);
+		break;
+	case EXPR_BINARY: {
+		AstExprBinary *binary = AS_BINARY(head);
+		if (binary->op == TOKEN_PLUS)
+			printf("+");
+		else
+			printf("*");
+		ast_print(binary->left, indent + 1);
+		ast_print(binary->right, indent + 1);
+		break;
+	}
+	default:
+		break;
+	}
 }

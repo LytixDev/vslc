@@ -14,21 +14,23 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "base/base.h"
-#include "base/sac_single.h"
-#include "ast.h"
-#include "lex.h"
 #include "parser.h"
+#include "ast.h"
+#include "base/sac_single.h"
+#include "lex.h"
 
 u32 prev_pri = 0;
 
-TokenType token_priorities[TOKEN_TYPE_LEN] = {
-    1,      /* TOKEN_NUM */
-    10,     /* TOKEN_PLUS */
-    20,     /* TOKEN_STAR */
-    1,      /* TOKEN_SEMICOLON */
-    1,      /* TOKEN_EOF */
+TokenType token_precedences[TOKEN_TYPE_LEN] = {
+	1, /* TOKEN_NUM */
+	10, /* TOKEN_PLUS */
+	20, /* TOKEN_STAR */
+	1, /* TOKEN_SEMICOLON */
+	1, /* TOKEN_EOF */
 };
+
+
+#if 0
 
 static AstExprBinary *rearange(AstExprBinary *expr)
 {
@@ -102,21 +104,93 @@ static AstExpr *parse_expr(Lexer *lexer)
     }
     ASSERT_NOT_REACHED;
 }
+#endif
+
+
+static AstExpr *parse_expr(Lexer *lexer, u32 precedence);
+
+
+static AstExprBinary *make_binary(Lexer *lexer, AstExpr *left, TokenType op, AstExpr *right)
+{
+	AstExprBinary *binary = m_arena_alloc(&lexer->arena, sizeof(AstExprBinary));
+	binary->type = EXPR_BINARY;
+	binary->op = op;
+	binary->left = left;
+	binary->right = right;
+	return binary;
+}
+
+static AstExprLiteral *make_literal(Lexer *lexer, Token token)
+{
+    AstExprLiteral *literal = m_arena_alloc(&lexer->arena, sizeof(AstExprLiteral));
+    literal->type = EXPR_LITERAL;
+    literal->lit_type = LIT_NUM;
+    literal->num_value = token.num_value;
+    return literal;
+}
+
+
+static bool is_bin_op(Token token)
+{
+	switch (token.type) {
+	case TOKEN_PLUS:
+	case TOKEN_STAR:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static AstExpr *parse_primary(Lexer *lexer)
+{
+	Token token = lex_advance(lexer);
+    return (AstExpr *)make_literal(lexer, token);
+}
+
+static AstExpr *parse_increasing_precedence(Lexer *lexer, AstExpr *left, u32 precedence)
+{
+	Token next = lex_peek(lexer, 1);
+	if (!is_bin_op(next))
+		return left;
+
+	u32 next_precedence = token_precedences[next.type];
+	if (precedence >= next_precedence)
+		return left;
+
+	lex_advance(lexer);
+	AstExpr *right = parse_expr(lexer, next_precedence);
+	return (AstExpr *)make_binary(lexer, left, next.type, right);
+}
+
+static AstExpr *parse_expr(Lexer *lexer, u32 precedence)
+{
+	AstExpr *left = parse_primary(lexer);
+	AstExpr *expr;
+	while (1) {
+		expr = parse_increasing_precedence(lexer, left, precedence);
+		if (expr == left) // pointer comparison
+			break;
+
+		left = expr;
+	}
+
+	return left;
+}
 
 AstExpr *parse(char *input)
 {
-    Arena lexer_arena;
-    m_arena_init_dynamic(&lexer_arena, 2, 512);
-    Lexer lexer = {
-        .had_error = false,
-        .input = input,
-        .pos_start = 0,
-        .pos_current = 0,
-        .start = (Point){0},
-        .current = (Point){0},
-        .state = lex_any,
-        .arena = lexer_arena,
-    };
+	Arena lexer_arena;
+	m_arena_init_dynamic(&lexer_arena, 2, 512);
+	Lexer lexer = {
+		.had_error = false,
+		.input = input,
+		.pos_start = 0,
+		.pos_current = 0,
+		.start = (Point){ 0 },
+		.current = (Point){ 0 },
+		.state = lex_any,
+		.arena = lexer_arena,
+	};
 
-    return parse_expr(&lexer);
+	return parse_expr(&lexer, 0);
 }
