@@ -27,9 +27,13 @@ typedef struct {
 
 typedef enum {
 	TOKEN_ERR = 0,
+
 	TOKEN_NUM,
+	TOKEN_STR,
+
 	TOKEN_PLUS,
 	TOKEN_STAR,
+	TOKEN_SLASH,
 
 	TOKEN_LPAREN,
 	TOKEN_RPAREN,
@@ -46,30 +50,30 @@ typedef struct {
 	StrView8 lexeme;
 
 	union {
-		Str8 str_value;
-		f64 num_value;
+        u32 str_list_idx;
+		s32 num_value;
 	};
 } Token;
 
-typedef struct lexer_t Lexer;
-typedef Token (*StateFn)(Lexer *);
-
-// TODO: should also keep track of the position of each newline
-struct lexer_t {
+// TODO: should also keep track of the position of each newline ?
+typedef struct lexer_t {
 	bool had_error;
 	char *input; // The input string being scanned.
 	u32 pos_start;
 	u32 pos_current;
 	Point start; // Start point of the current token being processed
 	Point current; // Current point in the input
-	StateFn state;
-};
+
+    // TODO: maybe not the best datastructure
+    Str8 *str_list;
+    u32 str_list_len;
+    u32 str_list_cap;
+} Lexer;
 
 
-Token lex_any(Lexer *lexer);
-
-Token lex_advance(Lexer *lexer);
-Token lex_peek(Lexer *lexer, u32 lookahead);
+void lex_init(Lexer *lexer, char *input);
+Token lex_next(Arena *arena, Lexer *lexer);
+Token lex_peek(Arena *arena, Lexer *lexer, u32 lookahead);
 
 
 #endif /* LEX_H */

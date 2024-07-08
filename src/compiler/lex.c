@@ -23,10 +23,27 @@
 #endif /* EOF */
 
 
-/* state functions */
-Token lex_any(Lexer *lexer);
-Token lex_num(Lexer *lexer);
+static Token lex_num(Lexer *lexer);
+static Token lex_str(Arena *arena, Lexer *lexer);
+static Token lex_comment(Lexer *lexer);
 
+
+static u32 str_list_push(Lexer *lexer, Str8 str)
+{
+    if (lexer->str_list_len == lexer->str_list_cap) {
+        lexer->str_list_cap *= 2;
+        lexer->str_list = realloc(lexer->str_list, lexer->str_list_cap);
+    }
+    lexer->str_list[lexer->str_list_len] = str;
+    lexer->str_list_len++;
+    return lexer->str_list_len - 1;
+}
+
+static void reset_token_ctx(Lexer *lexer)
+{
+	lexer->pos_start = lexer->pos_current;
+	lexer->start = lexer->current;
+}
 
 static char next(Lexer *lexer)
 {
@@ -46,10 +63,13 @@ static char peek(Lexer *lexer)
 	return lexer->input[lexer->pos_current];
 }
 
-static void reset_token_ctx(Lexer *lexer)
+static bool match(Lexer *lexer, char expected)
 {
-	lexer->pos_start = lexer->pos_current;
-	lexer->start = lexer->current;
+	if (peek(lexer) == expected) {
+		next(lexer);
+		return true;
+	}
+	return false;
 }
 
 static void backup(Lexer *lexer)
@@ -87,16 +107,16 @@ static Token emit(Lexer *lexer, TokenType type)
 		.start = lexer->start,
 		.end = lexer->current,
 		.lexeme = (StrView8){ .str = (u8 *)(lexer->input) + lexer->pos_start,
-							  .size = lexer->pos_current - lexer->pos_start + 1 },
+							  .len = lexer->pos_current - lexer->pos_start + 1 },
 	};
 
 	/* Set value based on type */
 	if (type == TOKEN_NUM) {
 		// TODO: convert to number
 
-		char *lexeme[token.lexeme.size + 1];
-		memcpy(lexeme, token.lexeme.str, token.lexeme.size);
-		lexeme[token.lexeme.size] = 0;
+		char *lexeme[token.lexeme.len + 1];
+		memcpy(lexeme, token.lexeme.str, token.lexeme.len);
+		lexeme[token.lexeme.len] = 0;
 		token.num_value = atof((const char *)lexeme);
 	}
 
@@ -104,44 +124,78 @@ static Token emit(Lexer *lexer, TokenType type)
 	return token;
 }
 
+static Token emit_str(Lexer *lexer, StrBuilder *sb)
+{
+    Token token = emit(lexer, TOKEN_STR);
+    token.str_list_idx = str_list_push(lexer, sb->str);
+    return token;
+}
+
 static bool is_numeric(char c)
 {
 	return c >= '0' && c <= '9';
 }
 
-
-Token lex_advance(Lexer *lexer)
+void lex_init(Lexer *lexer, char *input)
 {
-	return lexer->state(lexer);
+	*lexer = (Lexer){
+		.had_error = false,
+		.input = input,
+		.pos_start = 0,
+		.pos_current = 0,
+		.start = (Point){ 0 },
+		.current = (Point){ 0 },
+        .str_list_len = 0,
+        .str_list_cap = 16,
+	};
+
+    lexer->str_list = malloc(sizeof(Str8) * lexer->str_list_cap);
 }
 
-Token lex_peek(Lexer *lexer, u32 lookahead)
+Token lex_peek(Arena *arena, Lexer *lexer, u32 lookahead)
 {
 	// TODO: this is stupid because we do work which we later discard that work
 	//       instead we should not reset the state of the lexer, but instead
 	//       store the result of the previous work we did
 	Lexer lexer_save = *lexer;
 	for (u32 i = 0; i < lookahead - 1; i++) {
-		lexer->state(lexer);
+        lex_next(arena, lexer);
 	}
-	Token final = lexer->state(lexer);
+	Token final = lex_next(arena, lexer);
 	*lexer = lexer_save;
 	return final;
 }
 
-/* State functions */
-Token lex_any(Lexer *lexer)
+Token lex_next(Arena *arena, Lexer *lexer)
 {
 	while (1) {
 		char c = next(lexer);
 		switch (c) {
 		case EOF:
 			return (Token){ .type = TOKEN_EOF };
+
+        /* Whitespace */
 		case ' ':
+		case '\n':
 		case '\t':
+		case '\r':
 		case '\v':
 			reset_token_ctx(lexer);
 			break;
+
+        /* Comments or slash (divide) */
+        case '/': {
+            if (match(lexer, '/')) {
+                return lex_comment(lexer);
+            }
+            return emit(lexer, TOKEN_SLASH);
+            break;
+        };
+
+        /* Strings */
+        case '"':
+            return lex_str(arena, lexer);
+
 		/* Single character tokens */
 		case '+':
 			return emit(lexer, TOKEN_PLUS);
@@ -159,13 +213,47 @@ Token lex_any(Lexer *lexer)
 				return lex_num(lexer);
 			}
 		}
-		}
+	    }
 	}
 }
 
-Token lex_num(Lexer *lexer)
+static Token lex_num(Lexer *lexer)
 {
 	char *digits = "0123456789";
 	accept_run(lexer, digits);
 	return emit(lexer, TOKEN_NUM);
+}
+
+static Token lex_str(Arena *arena, Lexer *lexer)
+{
+    /* Came from '"' */
+    StrBuilder sb = make_str_builder(arena);
+    char c;
+	while ((c = next(lexer)) != '"') {
+		if (c == EOF || c == '\n') {
+            // Error
+        }
+        if (c == '\\') {
+            c = next(lexer);
+            if (c != '"') {
+                // Unknown escape sequence
+            }
+        }
+        str_builder_append_u8(&sb, (u8)c);
+	}
+    str_builder_append_u8(&sb, 0);
+    return emit_str(lexer, &sb);
+}
+
+static Token lex_comment(Lexer *lexer)
+{
+    /* Came from '//' */
+    char c;
+	while ((c = next(lexer)) != '\n') {
+		if (c == EOF) {
+            // Error
+        }
+	}
+    reset_token_ctx(lexer);
+    return (Token){ .type = TOKEN_ERR }; // Ignored
 }

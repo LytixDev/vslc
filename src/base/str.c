@@ -14,37 +14,29 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef STR_H
-#define STR_H
-
 #include "sac_single.h"
 #include "types.h"
-
-/*
- * Should always be null terminated.
- * Size does not include null terminator.
- */
-typedef struct {
-	u8 *str;
-	size_t len;
-} Str8;
-
-typedef struct {
-    Arena *arena;
-    Str8 str;
-	u32 cap;
-} StrBuilder;
-
-/*
- * A view into memory.
- * Not guaranteed to be null terminated.
- */
-typedef Str8 StrView8;
+#include "str.h"
 
 
-StrBuilder make_str_builder(Arena *arena);
-//void str_builder_append(StrBuilder *sb, char *cstr, u32 len);
-//void str_builder_append_str8(StrBuilder *sb, Str8 str);
-void str_builder_append_u8(StrBuilder *sb, u8 c);
+StrBuilder make_str_builder(Arena *arena) {
+    StrBuilder sb = {
+        .arena = arena,
+        .str = (Str8){ .len = 0 },
+        .cap = 16,
+    };
 
-#endif /* STR_H */
+    sb.str.str = m_arena_alloc(arena, sb.cap);
+    return sb;
+}
+
+void str_builder_append_u8(StrBuilder *sb, u8 c)
+{
+    if (sb->str.len == sb->cap) {
+        /* Doubled the allocation */
+        (void)m_arena_alloc(sb->arena, sb->cap);
+        sb->cap *= 2;
+    }
+
+    sb->str.str[sb->str.len++] = c;
+}

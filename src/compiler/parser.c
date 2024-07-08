@@ -23,14 +23,16 @@
 #include "parser.h"
 
 TokenType token_precedences[TOKEN_TYPE_LEN] = {
-	0, /* TOKEN_ERR */
-	1, /* TOKEN_NUM */
-	10, /* TOKEN_PLUS */
-	20, /* TOKEN_STAR */
-	0, /* TOKEN_LPAREN */
-	0, /* TOKEN_RPAREN */
-	1, /* TOKEN_SEMICOLON */
-	1, /* TOKEN_EOF */
+	0, // TOKEN_ERR,
+	0, // TOKEN_NUM,
+	0, // TOKEN_STR,
+	10, // TOKEN_PLUS,
+	20, // TOKEN_STAR,
+	20, // TOKEN_SLASH,
+	1, // TOKEN_LPAREN,
+	1, // TOKEN_RPAREN,
+	0, // TOKEN_SEMICOLON,
+	0, // TOKEN_EOF,
 };
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
@@ -98,7 +100,7 @@ static bool is_bin_op(Token token)
 
 static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
 {
-	Token token = lex_advance(&parser->lexer);
+	Token token = lex_next(&parser->arena, &parser->lexer);
 	if (token.type != expected) {
 		parse_error_append(parser, &token, pet, NULL);
 		return (Token){ .type = TOKEN_ERR };
@@ -108,7 +110,7 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
 
 static AstExpr *parse_primary(Parser *parser)
 {
-	Token token = lex_advance(&parser->lexer);
+	Token token = lex_next(&parser->arena, &parser->lexer);
 	switch (token.type) {
 	case TOKEN_LPAREN: {
 		AstExpr *expr = parse_expr(parser, 0);
@@ -127,7 +129,7 @@ static AstExpr *parse_primary(Parser *parser)
 
 static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 precedence)
 {
-	Token next = lex_peek(&parser->lexer, 1);
+	Token next = lex_peek(&parser->arena, &parser->lexer, 1);
 	if (!is_bin_op(next))
 		return left;
 
@@ -135,7 +137,7 @@ static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 p
 	if (precedence >= next_precedence)
 		return left;
 
-	lex_advance(&parser->lexer);
+	lex_next(&parser->arena, &parser->lexer);
 	AstExpr *right = parse_expr(parser, next_precedence);
 	return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
 }
@@ -157,25 +159,15 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
 
 ParseResult parse(char *input)
 {
-	Lexer lexer = {
-		.had_error = false,
-		.input = input,
-		.pos_start = 0,
-		.pos_current = 0,
-		.start = (Point){ 0 },
-		.current = (Point){ 0 },
-		.state = lex_any,
-	};
 	Parser parser = {
-		.lexer = lexer,
 		.n_errors = 0,
 		.err_head = NULL,
 		.err_tail = NULL,
 	};
+    lex_init(&parser.lexer, input);
 	m_arena_init_dynamic(&parser.arena, 2, 512);
 
 	AstExpr *head = parse_expr(&parser, 0);
-
 	return (ParseResult){
 		.n_errors = parser.n_errors,
 		.err_head = parser.err_head,
