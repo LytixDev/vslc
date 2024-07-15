@@ -43,8 +43,8 @@ typedef Str8 StrView8;
 
 
 StrBuilder make_str_builder(Arena *arena);
-//void str_builder_append(StrBuilder *sb, char *cstr, u32 len);
 //void str_builder_append_str8(StrBuilder *sb, Str8 str);
 void str_builder_append_u8(StrBuilder *sb, u8 c);
+void str_builder_append_cstr(StrBuilder *sb, char *cstr, u32 len);
 
 #endif /* STR_H */

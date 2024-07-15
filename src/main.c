@@ -17,8 +17,8 @@
 #include <stdio.h>
 #include <sys/stat.h> // TODO: should be behind an OS layer
 
-#include "interpreter/ast.h"
-#include "interpreter/parser.h"
+#include "compiler/ast.h"
+#include "compiler/parser.h"
 
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"

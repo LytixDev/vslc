@@ -14,6 +14,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include <string.h>
+
 #include "sac_single.h"
 #include "types.h"
 #include "str.h"
@@ -33,10 +35,22 @@ StrBuilder make_str_builder(Arena *arena) {
 void str_builder_append_u8(StrBuilder *sb, u8 c)
 {
     if (sb->str.len == sb->cap) {
-        /* Doubled the allocation */
+        /* Double the allocation */
         (void)m_arena_alloc(sb->arena, sb->cap);
         sb->cap *= 2;
     }
 
     sb->str.str[sb->str.len++] = c;
+}
+
+void str_builder_append_cstr(StrBuilder *sb, char *cstr, u32 len)
+{
+    while (sb->str.len + len < sb->cap) {
+        /* Double the allocation */
+        (void)m_arena_alloc(sb->arena, sb->cap);
+        sb->cap *= 2;
+    }
+
+    memcpy((char *)sb->str.str, cstr, len);
+    sb->str.len += len;
 }

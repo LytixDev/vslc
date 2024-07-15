@@ -14,10 +14,29 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef TESTS_H
-#define TESTS_H
 
-void test_binary_precedence(void);
-void test_lexer(void);
+#include <assert.h>
+#include <stdbool.h>
+#include <stdio.h>
 
-#endif /* TESTS_H */
+#include "base/sac_single.h"
+#include "compiler/lex.h"
+#include "tests.h"
+
+
+void test_lexer(void)
+{
+    char *input = "var ten = 10;";
+    Lexer lexer;
+    Arena arena;
+    lex_init(&lexer, input);
+	m_arena_init_dynamic(&arena, 2, 512);
+
+    printf("input: '%s'\n", input);
+    while (1) {
+        Token next = lex_next(&arena, &lexer);
+        token_print(next);
+        if (next.type == TOKEN_EOF)
+            break;
+    }
+}

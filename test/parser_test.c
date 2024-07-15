@@ -19,8 +19,8 @@
 #include <stdbool.h>
 
 #include "base/sac_single.h"
-#include "interpreter/ast.h"
-#include "interpreter/parser.h"
+#include "compiler/ast.h"
+#include "compiler/parser.h"
 #include "tests.h"
 
 

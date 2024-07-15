@@ -23,6 +23,23 @@
 #endif /* EOF */
 
 
+char *reserved_words[] = {
+    "func",
+    "begin",
+    "end",
+    "return",
+    "print",
+    "break",
+    "if",
+    "then",
+    "else",
+    "while",
+    "do",
+    "var",
+};
+
+
+static Token lex_ident(Arena *arena, Lexer *lexer);
 static Token lex_num(Lexer *lexer);
 static Token lex_str(Arena *arena, Lexer *lexer);
 static Token lex_comment(Lexer *lexer);
@@ -124,9 +141,9 @@ static Token emit(Lexer *lexer, TokenType type)
 	return token;
 }
 
-static Token emit_str(Lexer *lexer, StrBuilder *sb)
+static Token emit_str(Lexer *lexer, StrBuilder *sb, TokenType type)
 {
-    Token token = emit(lexer, TOKEN_STR);
+    Token token = emit(lexer, type);
     token.str_list_idx = str_list_push(lexer, sb->str);
     return token;
 }
@@ -134,6 +151,16 @@ static Token emit_str(Lexer *lexer, StrBuilder *sb)
 static bool is_numeric(char c)
 {
 	return c >= '0' && c <= '9';
+}
+
+static bool is_alpha(char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static bool is_valid_identifier(char c)
+{
+	return is_numeric(c) || is_alpha(c) || c == '_'; 
 }
 
 void lex_init(Lexer *lexer, char *input)
@@ -196,9 +223,11 @@ Token lex_next(Arena *arena, Lexer *lexer)
         case '"':
             return lex_str(arena, lexer);
 
-		/* Single character tokens */
+		/* Single-character tokens */
 		case '+':
 			return emit(lexer, TOKEN_PLUS);
+		case '-':
+			return emit(lexer, TOKEN_MINUS);
 		case '*':
 			return emit(lexer, TOKEN_STAR);
 		case ';':
@@ -207,14 +236,80 @@ Token lex_next(Arena *arena, Lexer *lexer)
 			return emit(lexer, TOKEN_LPAREN);
 		case ')':
 			return emit(lexer, TOKEN_RPAREN);
+		case '=':
+			return emit(lexer, TOKEN_EQ);
+
+        /* Single- or two-character tokens */
+        case '<':
+            return match(lexer, '<') ? emit(lexer, TOKEN_LSHIFT) : emit(lexer, TOKEN_LESS);
+        case '>':
+            return match(lexer, '>') ? emit(lexer, TOKEN_RSHIFT) : emit(lexer, TOKEN_GREATER);
+        case ':': {
+            if (match(lexer, '=')) {
+                return emit(lexer, TOKEN_ASSIGNMENT);
+            } else {
+                // Error
+            }
+        };
+        case '!': {
+            if (match(lexer, '=')) {
+                return emit(lexer, TOKEN_NEQ);
+            } else {
+                // Error
+            }
+        };
 
 		default: {
 			if (is_numeric(c)) {
 				return lex_num(lexer);
 			}
+            if (!(is_alpha(c))) {
+                // Error
+            }
+            /* Reserved words and identifiers */
+            return lex_ident(arena, lexer);
 		}
 	    }
 	}
+}
+
+static Token lex_ident(Arena *arena, Lexer *lexer)
+{
+    char c;
+    do {
+        c = next(lexer);
+    } while (is_valid_identifier(c));
+
+    backup(lexer);
+    char *ident = lexer->input + lexer->pos_start;
+    u32 ident_len = lexer->pos_current - lexer->pos_start;
+
+    /* Check if identifier is a keyword */
+    size_t reserved_words_len = ARRAY_LENGTH(reserved_words);
+    // TODO: Linear search could be optimized into a search based on a hash map.
+    for (size_t i = 0; i < reserved_words_len; i++) {
+        char *reserved = reserved_words[i];
+        size_t this_len = (u32)strlen(reserved);
+        if (ident_len != this_len) {
+            continue;
+        }
+
+        bool match = true;
+        for (size_t j = 0; j < ident_len; j++) {
+            if (ident[j] != reserved[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            return emit(lexer, TOKEN_FUNC + i);
+        }
+    }
+
+    StrBuilder sb = make_str_builder(arena);
+    str_builder_append_cstr(&sb, ident, ident_len);
+    str_builder_append_u8(&sb, 0);
+    return emit_str(lexer, &sb, TOKEN_IDENTIFIER);
 }
 
 static Token lex_num(Lexer *lexer)
@@ -242,7 +337,7 @@ static Token lex_str(Arena *arena, Lexer *lexer)
         str_builder_append_u8(&sb, (u8)c);
 	}
     str_builder_append_u8(&sb, 0);
-    return emit_str(lexer, &sb);
+    return emit_str(lexer, &sb, TOKEN_STR);
 }
 
 static Token lex_comment(Lexer *lexer)
@@ -256,4 +351,46 @@ static Token lex_comment(Lexer *lexer)
 	}
     reset_token_ctx(lexer);
     return (Token){ .type = TOKEN_ERR }; // Ignored
+}
+
+/* Debug */
+#include <stdio.h>
+char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
+	"ERR",
+	"NUM",
+	"STR",
+    "ASSIGNMENT",
+	"PLUS",
+    "MINUS",
+	"STAR",
+	"SLASH",
+    "LSHIFT",
+    "RSHIFT",
+    "EQ",
+    "NEQ",
+    "LESS",
+    "GREATER",
+	"LPAREN",
+	"RPAREN",
+	"SEMICOLON",
+	"EOF",
+    "IDENTIFIER",
+    "FUNC",
+    "BEGIN",
+    "END",
+    "RETURN",
+    "PRINT",
+    "BREAK",
+    "IF",
+    "THEN",
+    "ELSE",
+    "WHILE",
+    "DO",
+    "VAR",
+};
+
+
+void token_print(Token token)
+{
+    printf("%s\n", token_type_str_map[token.type]);
 }

@@ -22,17 +22,38 @@
 #include "lex.h"
 #include "parser.h"
 
-TokenType token_precedences[TOKEN_TYPE_LEN] = {
-	0, // TOKEN_ERR,
-	0, // TOKEN_NUM,
-	0, // TOKEN_STR,
+TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
+	0,  // TOKEN_ERR,
+	0,  // TOKEN_NUM,
+	0,  // TOKEN_STR,
+    0,  // TOKEN_ASSIGNMENT,
 	10, // TOKEN_PLUS,
+    10, // TOKEN_MINUS,
 	20, // TOKEN_STAR,
 	20, // TOKEN_SLASH,
-	1, // TOKEN_LPAREN,
-	1, // TOKEN_RPAREN,
-	0, // TOKEN_SEMICOLON,
-	0, // TOKEN_EOF,
+    5,  // TOKEN_LSHIFT,
+    5,  // TOKEN_RSHIFT,
+    1,  // TOKEN_EQ,
+    1,  // TOKEN_NEQ,
+    1,  // TOKEN_LESS,
+    1,  // TOKEN_GREATER,
+	0,  // TOKEN_LPAREN,
+	0,  // TOKEN_RPAREN,
+	0,  // TOKEN_SEMICOLON,
+	0,  // TOKEN_EOF,
+    0,  // TOKEN_IDENTIFIER,
+    0,  // TOKEN_FUNC,
+    0,  // TOKEN_BEGIN,
+    0,  // TOKEN_END,
+    0,  // TOKEN_RETURN,
+    0,  // TOKEN_PRINT,
+    0,  // TOKEN_BREAK,
+    0,  // TOKEN_IF,
+    0,  // TOKEN_THEN,
+    0,  // TOKEN_ELSE,
+    0,  // TOKEN_WHILE,
+    0,  // TOKEN_DO,
+    0,  // TOKEN_VAR,
 };
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence);

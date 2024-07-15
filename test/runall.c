@@ -22,4 +22,5 @@
 int main(void)
 {
 	test_binary_precedence();
+	test_lexer();
 }

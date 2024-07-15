@@ -28,19 +28,51 @@ typedef struct {
 typedef enum {
 	TOKEN_ERR = 0,
 
+    // Types
 	TOKEN_NUM,
 	TOKEN_STR,
 
+    // Assignment
+    TOKEN_ASSIGNMENT,
+
+    // Basic arithmetic
 	TOKEN_PLUS,
+    TOKEN_MINUS,
 	TOKEN_STAR,
 	TOKEN_SLASH,
 
+    // Bitwise shifting
+    TOKEN_LSHIFT,
+    TOKEN_RSHIFT,
+
+    // Relational
+    TOKEN_EQ,
+    TOKEN_NEQ,
+    TOKEN_LESS,
+    TOKEN_GREATER,
+
+    // Misc..
 	TOKEN_LPAREN,
 	TOKEN_RPAREN,
-
 	TOKEN_SEMICOLON,
 	TOKEN_EOF,
-	TOKEN_TYPE_LEN,
+
+    // Identifier and reserved words
+    TOKEN_IDENTIFIER,
+    TOKEN_FUNC,
+    TOKEN_BEGIN,
+    TOKEN_END,
+    TOKEN_RETURN,
+    TOKEN_PRINT,
+    TOKEN_BREAK,
+    TOKEN_IF,
+    TOKEN_THEN,
+    TOKEN_ELSE,
+    TOKEN_WHILE,
+    TOKEN_DO,
+    TOKEN_VAR,
+
+	TOKEN_TYPE_ENUM_COUNT,
 } TokenType;
 
 typedef struct {
@@ -74,6 +106,9 @@ typedef struct lexer_t {
 void lex_init(Lexer *lexer, char *input);
 Token lex_next(Arena *arena, Lexer *lexer);
 Token lex_peek(Arena *arena, Lexer *lexer, u32 lookahead);
+
+// Debug
+void token_print(Token token);
 
 
 #endif /* LEX_H */
