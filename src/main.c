@@ -26,43 +26,43 @@
 
 int main(int argc, char **argv)
 {
-	if (argc != 2) {
-		fprintf(stderr, "Expected filename argument");
-		return 1;
-	}
+    if (argc != 2) {
+        fprintf(stderr, "Expected filename argument");
+        return 1;
+    }
 
-	/* Read input file */
-	char *file_path = argv[1];
-	struct stat st;
-	if (stat(file_path, &st) != 0) {
-		fprintf(stderr, "Could not stat file '%s'\n", file_path);
-		return 1;
-	}
+    /* Read input file */
+    char *file_path = argv[1];
+    struct stat st;
+    if (stat(file_path, &st) != 0) {
+        fprintf(stderr, "Could not stat file '%s'\n", file_path);
+        return 1;
+    }
 
-	size_t input_size = st.st_size;
-	char *input = malloc(sizeof(char) * (input_size + 1));
-	input[input_size] = 0;
-	FILE *fp = fopen(file_path, "r");
-	if (fp == NULL) {
-		fprintf(stderr, "Could not open file '%s'\n", file_path);
-		return 1;
-	}
-	if (fread(input, sizeof(char), st.st_size, fp) != input_size) {
-		fprintf(stderr, "Could not read file '%s'\n", file_path);
-		return 1;
-	}
-	fclose(fp);
+    size_t input_size = st.st_size;
+    char *input = malloc(sizeof(char) * (input_size + 1));
+    input[input_size] = 0;
+    FILE *fp = fopen(file_path, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Could not open file '%s'\n", file_path);
+        return 1;
+    }
+    if (fread(input, sizeof(char), st.st_size, fp) != input_size) {
+        fprintf(stderr, "Could not read file '%s'\n", file_path);
+        return 1;
+    }
+    fclose(fp);
 
-	ParseResult res = parse(input);
-	ParseError *parse_error = res.err_head;
-	for (u32 i = 0; i < res.n_errors; i++) {
-		char *msg = parse_error->msg;
-		if (msg == NULL) {
-			msg = PARSE_ERROR_MSGS[parse_error->type];
-		}
-		fprintf(stderr, "[%i] %s\n", i + 1, msg);
-	}
-	ast_print(res.head, 0);
+    ParseResult res = parse(input);
+    ParseError *parse_error = res.err_head;
+    for (u32 i = 0; i < res.n_errors; i++) {
+        char *msg = parse_error->msg;
+        if (msg == NULL) {
+            msg = PARSE_ERROR_MSGS[parse_error->type];
+        }
+        fprintf(stderr, "[%i] %s\n", i + 1, msg);
+    }
+    ast_print(res.head, 0);
 
-	free(input);
+    free(input);
 }

@@ -21,85 +21,85 @@
 #include "base/types.h"
 
 typedef struct {
-	u32 l; // Line
-	u32 c; // Column
+    u32 l; // Line
+    u32 c; // Column
 } Point;
 
 typedef enum {
-	TOKEN_ERR = 0,
+    TOKEN_ERR = 0,
 
-	// Types
-	TOKEN_NUM,
-	TOKEN_STR,
+    // Types
+    TOKEN_NUM,
+    TOKEN_STR,
 
-	// Assignment
-	TOKEN_ASSIGNMENT,
+    // Assignment
+    TOKEN_ASSIGNMENT,
 
-	// Basic arithmetic
-	TOKEN_PLUS,
-	TOKEN_MINUS,
-	TOKEN_STAR,
-	TOKEN_SLASH,
+    // Basic arithmetic
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_STAR,
+    TOKEN_SLASH,
 
-	// Bitwise shifting
-	TOKEN_LSHIFT,
-	TOKEN_RSHIFT,
+    // Bitwise shifting
+    TOKEN_LSHIFT,
+    TOKEN_RSHIFT,
 
-	// Relational
-	TOKEN_EQ,
-	TOKEN_NEQ,
-	TOKEN_LESS,
-	TOKEN_GREATER,
+    // Relational
+    TOKEN_EQ,
+    TOKEN_NEQ,
+    TOKEN_LESS,
+    TOKEN_GREATER,
 
-	// Misc..
-	TOKEN_LPAREN,
-	TOKEN_RPAREN,
-	TOKEN_SEMICOLON,
-	TOKEN_EOF,
+    // Misc..
+    TOKEN_LPAREN,
+    TOKEN_RPAREN,
+    TOKEN_SEMICOLON,
+    TOKEN_EOF,
 
-	// Identifier and reserved words
-	TOKEN_IDENTIFIER,
-	TOKEN_FUNC,
-	TOKEN_BEGIN,
-	TOKEN_END,
-	TOKEN_RETURN,
-	TOKEN_PRINT,
-	TOKEN_BREAK,
-	TOKEN_IF,
-	TOKEN_THEN,
-	TOKEN_ELSE,
-	TOKEN_WHILE,
-	TOKEN_DO,
-	TOKEN_VAR,
+    // Identifier and reserved words
+    TOKEN_IDENTIFIER,
+    TOKEN_FUNC,
+    TOKEN_BEGIN,
+    TOKEN_END,
+    TOKEN_RETURN,
+    TOKEN_PRINT,
+    TOKEN_BREAK,
+    TOKEN_IF,
+    TOKEN_THEN,
+    TOKEN_ELSE,
+    TOKEN_WHILE,
+    TOKEN_DO,
+    TOKEN_VAR,
 
-	TOKEN_TYPE_ENUM_COUNT,
+    TOKEN_TYPE_ENUM_COUNT,
 } TokenType;
 
 typedef struct {
-	TokenType type;
-	Point start;
-	Point end;
-	StrView8 lexeme;
+    TokenType type;
+    Point start;
+    Point end;
+    StrView8 lexeme;
 
-	union {
-		u32 str_list_idx;
-		s32 num_value;
-	};
+    union {
+        u32 str_list_idx;
+        s32 num_value;
+    };
 } Token;
 
 // TODO: should also keep track of the position of each newline ?
 typedef struct lexer_t {
-	bool had_error;
-	char *input; // The input string being scanned.
-	u32 pos_start;
-	u32 pos_current;
-	Point start; // Start point of the current token being processed
-	Point current; // Current point in the input
+    bool had_error;
+    char *input; // The input string being scanned.
+    u32 pos_start;
+    u32 pos_current;
+    Point start; // Start point of the current token being processed
+    Point current; // Current point in the input
 
-	// TODO: maybe not the best datastructure
-	Str8 *str_list;
-	u32 str_list_len;
-	u32 str_list_cap;
+    // TODO: maybe not the best datastructure
+    Str8 *str_list;
+    u32 str_list_len;
+    u32 str_list_cap;
 } Lexer;
 
 

@@ -22,34 +22,34 @@
 #include "lex.h"
 
 typedef enum {
-	EXPR_UNARY = 0,
-	EXPR_BINARY,
-	EXPR_LITERAL,
+    EXPR_UNARY = 0,
+    EXPR_BINARY,
+    EXPR_LITERAL,
 } AstExprType;
 
 typedef enum {
-	LIT_STR,
-	LIT_NUM,
+    LIT_STR,
+    LIT_NUM,
 } LiteralType;
 
 typedef struct expr_t {
-	AstExprType type;
+    AstExprType type;
 } AstExpr;
 
 typedef struct {
-	AstExprType type;
-	LiteralType lit_type;
-	union {
-		Str8 str_value;
-		f64 num_value;
-	};
+    AstExprType type;
+    LiteralType lit_type;
+    union {
+        Str8 str_value;
+        f64 num_value;
+    };
 } AstExprLiteral;
 
 typedef struct {
-	AstExprType type;
-	AstExpr *left;
-	TokenType op;
-	AstExpr *right;
+    AstExprType type;
+    AstExpr *left;
+    TokenType op;
+    AstExpr *right;
 } AstExprBinary;
 
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
