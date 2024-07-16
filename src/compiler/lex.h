@@ -28,49 +28,49 @@ typedef struct {
 typedef enum {
 	TOKEN_ERR = 0,
 
-    // Types
+	// Types
 	TOKEN_NUM,
 	TOKEN_STR,
 
-    // Assignment
-    TOKEN_ASSIGNMENT,
+	// Assignment
+	TOKEN_ASSIGNMENT,
 
-    // Basic arithmetic
+	// Basic arithmetic
 	TOKEN_PLUS,
-    TOKEN_MINUS,
+	TOKEN_MINUS,
 	TOKEN_STAR,
 	TOKEN_SLASH,
 
-    // Bitwise shifting
-    TOKEN_LSHIFT,
-    TOKEN_RSHIFT,
+	// Bitwise shifting
+	TOKEN_LSHIFT,
+	TOKEN_RSHIFT,
 
-    // Relational
-    TOKEN_EQ,
-    TOKEN_NEQ,
-    TOKEN_LESS,
-    TOKEN_GREATER,
+	// Relational
+	TOKEN_EQ,
+	TOKEN_NEQ,
+	TOKEN_LESS,
+	TOKEN_GREATER,
 
-    // Misc..
+	// Misc..
 	TOKEN_LPAREN,
 	TOKEN_RPAREN,
 	TOKEN_SEMICOLON,
 	TOKEN_EOF,
 
-    // Identifier and reserved words
-    TOKEN_IDENTIFIER,
-    TOKEN_FUNC,
-    TOKEN_BEGIN,
-    TOKEN_END,
-    TOKEN_RETURN,
-    TOKEN_PRINT,
-    TOKEN_BREAK,
-    TOKEN_IF,
-    TOKEN_THEN,
-    TOKEN_ELSE,
-    TOKEN_WHILE,
-    TOKEN_DO,
-    TOKEN_VAR,
+	// Identifier and reserved words
+	TOKEN_IDENTIFIER,
+	TOKEN_FUNC,
+	TOKEN_BEGIN,
+	TOKEN_END,
+	TOKEN_RETURN,
+	TOKEN_PRINT,
+	TOKEN_BREAK,
+	TOKEN_IF,
+	TOKEN_THEN,
+	TOKEN_ELSE,
+	TOKEN_WHILE,
+	TOKEN_DO,
+	TOKEN_VAR,
 
 	TOKEN_TYPE_ENUM_COUNT,
 } TokenType;
@@ -82,7 +82,7 @@ typedef struct {
 	StrView8 lexeme;
 
 	union {
-        u32 str_list_idx;
+		u32 str_list_idx;
 		s32 num_value;
 	};
 } Token;
@@ -96,10 +96,10 @@ typedef struct lexer_t {
 	Point start; // Start point of the current token being processed
 	Point current; // Current point in the input
 
-    // TODO: maybe not the best datastructure
-    Str8 *str_list;
-    u32 str_list_len;
-    u32 str_list_cap;
+	// TODO: maybe not the best datastructure
+	Str8 *str_list;
+	u32 str_list_len;
+	u32 str_list_cap;
 } Lexer;
 
 
