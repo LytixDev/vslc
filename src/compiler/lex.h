@@ -87,9 +87,18 @@ typedef struct {
     };
 } Token;
 
+
+typedef struct lex_error_t LexError;
+struct lex_error_t {
+    LexError *next;
+    char *msg;
+    Point start;
+    Point point_of_failure;
+};
+
+
 // TODO: should also keep track of the position of each newline ?
 typedef struct lexer_t {
-    bool had_error;
     char *input; // The input string being scanned.
     u32 pos_start;
     u32 pos_current;
@@ -100,6 +109,10 @@ typedef struct lexer_t {
     Str8 *str_list;
     u32 str_list_len;
     u32 str_list_cap;
+
+    u32 n_errors;
+    LexError *err_head;
+    LexError *err_tail;
 } Lexer;
 
 

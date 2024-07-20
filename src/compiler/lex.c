@@ -31,7 +31,40 @@ char *reserved_words[] = {
 static Token lex_ident(Arena *arena, Lexer *lexer);
 static Token lex_num(Lexer *lexer);
 static Token lex_str(Arena *arena, Lexer *lexer);
-static Token lex_comment(Lexer *lexer);
+static Token lex_comment(Arena *arena, Lexer *lexer);
+
+static void reset_token_ctx(Lexer *lexer)
+{
+    lexer->pos_start = lexer->pos_current;
+    lexer->start = lexer->current;
+}
+
+static LexError *make_lex_error(Arena *arena, Lexer *lexer, char *msg)
+{
+    LexError *lex_error = m_arena_alloc(arena, sizeof(LexError));
+    size_t msg_len = strlen(msg) + 1; // TODO: avoid strlen?
+    lex_error->msg = m_arena_alloc(arena, msg_len);
+    memcpy(lex_error->msg, msg, msg_len);
+    lex_error->start = lexer->start;
+    lex_error->point_of_failure = lexer->current;
+    lex_error->next = NULL;
+    return lex_error;
+}
+
+static void lex_error_append(Arena *arena, Lexer *lexer, char *msg)
+{
+    LexError *lex_error = make_lex_error(arena, lexer, msg);
+    if (lexer->err_head == NULL) {
+        lexer->err_head = lex_error;
+    } else {
+        lexer->err_tail->next = lex_error;
+    }
+    lexer->err_tail = lex_error;
+
+    lexer->n_errors++;
+
+    reset_token_ctx(lexer);
+}
 
 
 static u32 str_list_push(Lexer *lexer, Str8 str)
@@ -43,12 +76,6 @@ static u32 str_list_push(Lexer *lexer, Str8 str)
     lexer->str_list[lexer->str_list_len] = str;
     lexer->str_list_len++;
     return lexer->str_list_len - 1;
-}
-
-static void reset_token_ctx(Lexer *lexer)
-{
-    lexer->pos_start = lexer->pos_current;
-    lexer->start = lexer->current;
 }
 
 static char next(Lexer *lexer)
@@ -155,7 +182,6 @@ static bool is_valid_identifier(char c)
 void lex_init(Lexer *lexer, char *input)
 {
     *lexer = (Lexer){
-        .had_error = false,
         .input = input,
         .pos_start = 0,
         .pos_current = 0,
@@ -163,6 +189,9 @@ void lex_init(Lexer *lexer, char *input)
         .current = (Point){ 0 },
         .str_list_len = 0,
         .str_list_cap = 16,
+        .n_errors = 0,
+        .err_head = NULL,
+        .err_tail = NULL,
     };
 
     lexer->str_list = malloc(sizeof(Str8) * lexer->str_list_cap);
@@ -202,7 +231,7 @@ Token lex_next(Arena *arena, Lexer *lexer)
         /* Comments or slash (divide) */
         case '/': {
             if (match(lexer, '/')) {
-                return lex_comment(lexer);
+                return lex_comment(arena, lexer);
             }
             return emit(lexer, TOKEN_SLASH);
             break;
@@ -237,14 +266,16 @@ Token lex_next(Arena *arena, Lexer *lexer)
             if (match(lexer, '=')) {
                 return emit(lexer, TOKEN_ASSIGNMENT);
             } else {
-                // Error
+                lex_error_append(arena, lexer, "Expected '=' after ':'");
+                return (Token){ .type = TOKEN_ERR };
             }
         };
         case '!': {
             if (match(lexer, '=')) {
                 return emit(lexer, TOKEN_NEQ);
             } else {
-                // Error
+                lex_error_append(arena, lexer, "Expected '=' after '!'");
+                return (Token){ .type = TOKEN_ERR };
             }
         };
 
@@ -253,7 +284,8 @@ Token lex_next(Arena *arena, Lexer *lexer)
                 return lex_num(lexer);
             }
             if (!(is_alpha(c))) {
-                // Error
+                lex_error_append(arena, lexer, "Unrecognized character");
+                return (Token){ .type = TOKEN_ERR };
             }
             /* Reserved words and identifiers */
             return lex_ident(arena, lexer);
@@ -311,35 +343,46 @@ static Token lex_num(Lexer *lexer)
 static Token lex_str(Arena *arena, Lexer *lexer)
 {
     /* Came from '"' */
+    bool had_error = false;
     StrBuilder sb = make_str_builder(arena);
     char c;
     while ((c = next(lexer)) != '"') {
         if (c == EOF || c == '\n') {
-            // Error
+            lex_error_append(arena, lexer, "Recieved newline or EOF inside string literal");
+            return (Token){ .type = TOKEN_ERR };
         }
         if (c == '\\') {
             c = next(lexer);
             if (c != '"') {
-                // Unknown escape sequence
+                lex_error_append(arena, lexer, "Unknown escape character inside string literal");
+                had_error = true;
+                continue; // To gracefully recover
             }
         }
         str_builder_append_u8(&sb, (u8)c);
+    }
+
+    if (had_error) {
+        reset_token_ctx(lexer);
+        return (Token){ .type = TOKEN_ERR };
     }
     str_builder_append_u8(&sb, 0);
     return emit_str(lexer, &sb, TOKEN_STR);
 }
 
-static Token lex_comment(Lexer *lexer)
+static Token lex_comment(Arena *arena, Lexer *lexer)
 {
     /* Came from '//' */
     char c;
     while ((c = next(lexer)) != '\n') {
         if (c == EOF) {
-            // Error
+            return emit(lexer, TOKEN_EOF);
         }
     }
+
+    /* Comments are ignored, so we need to lex the next non-ignored token */
     reset_token_ctx(lexer);
-    return (Token){ .type = TOKEN_ERR }; // Ignored
+    return lex_next(arena, lexer);
 }
 
 /* Debug */
