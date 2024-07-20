@@ -38,12 +38,18 @@ typedef struct expr_t {
 
 typedef struct {
     AstExprType type;
-    LiteralType lit_type;
+    LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
     union {
-        Str8 str_value;
-        f64 num_value;
+        u32 str_list_idx;
+        s32 num_value;
     };
 } AstExprLiteral;
+
+typedef struct {
+    AstExprType type;
+    TokenType op;
+    AstExpr *expr;
+} AstExprUnary;
 
 typedef struct {
     AstExprType type;
@@ -51,6 +57,13 @@ typedef struct {
     TokenType op;
     AstExpr *right;
 } AstExprBinary;
+
+typedef struct {
+    AstExprType type;
+    AstExpr **exprs;
+    u32 len;
+    u32 cap;
+} AstExprList;
 
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))

@@ -26,7 +26,7 @@
 
 void test_lexer(void)
 {
-    char *input = "var a = \"some_str\";";
+    char *input = "var a = \"some_str\"; // ignored\nvar b = \"not_ignored\"";
     Lexer lexer;
     Arena arena;
     lex_init(&lexer, input);

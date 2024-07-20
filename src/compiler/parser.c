@@ -26,17 +26,17 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_ERR,
     0, // TOKEN_NUM,
     0, // TOKEN_STR,
-    0, // TOKEN_ASSIGNMENT,
-    10, // TOKEN_PLUS,
-    10, // TOKEN_MINUS,
-    20, // TOKEN_STAR,
-    20, // TOKEN_SLASH,
-    5, // TOKEN_LSHIFT,
-    5, // TOKEN_RSHIFT,
-    1, // TOKEN_EQ,
-    1, // TOKEN_NEQ,
-    1, // TOKEN_LESS,
-    1, // TOKEN_GREATER,
+    1, // TOKEN_ASSIGNMENT,
+    5, // TOKEN_PLUS,
+    5, // TOKEN_MINUS,
+    10, // TOKEN_STAR,
+    10, // TOKEN_SLASH,
+    15, // TOKEN_LSHIFT,
+    15, // TOKEN_RSHIFT,
+    3, // TOKEN_EQ,
+    3, // TOKEN_NEQ,
+    3, // TOKEN_LESS,
+    3, // TOKEN_GREATER,
     0, // TOKEN_LPAREN,
     0, // TOKEN_RPAREN,
     0, // TOKEN_SEMICOLON,
@@ -102,8 +102,13 @@ static AstExprLiteral *make_literal(Arena *arena, Token token)
 {
     AstExprLiteral *literal = m_arena_alloc(arena, sizeof(AstExprLiteral));
     literal->type = EXPR_LITERAL;
-    literal->lit_type = LIT_NUM;
-    literal->num_value = token.num_value;
+    if (token.type == TOKEN_NUM) {
+        literal->lit_type = LIT_NUM;
+        literal->num_value = token.num_value;
+    } else {
+        literal->lit_type = LIT_STR;
+        literal->str_list_idx = token.str_list_idx;
+    }
     return literal;
 }
 
@@ -142,6 +147,8 @@ static AstExpr *parse_primary(Parser *parser)
         return expr;
     }
     case TOKEN_NUM:
+    case TOKEN_STR:
+    case TOKEN_IDENTIFIER:
         return (AstExpr *)make_literal(&parser->arena, token);
     default:
         ASSERT_NOT_REACHED;

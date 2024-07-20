@@ -27,7 +27,7 @@ void ast_print(AstExpr *head, u32 indent)
 
     switch (head->type) {
     case EXPR_LITERAL:
-        printf("%f", AS_LITERAL(head)->num_value);
+        printf("%d", AS_LITERAL(head)->num_value);
         break;
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
