@@ -30,21 +30,28 @@ void ast_print(AstExpr *head, Str8 *str_list, u32 indent, bool print_newline)
     }
 
     switch (head->type) {
-    case EXPR_LITERAL: {
-        AstExprLiteral *lit = AS_LITERAL(head);
-        if (lit->type == LIT_NUM) {
-            printf("%d", lit->num_value);
-        } else {
-            printf("%s", str_list[lit->str_list_idx].str);
-        }
+    case EXPR_UNARY: {
+        AstExprUnary *unary = AS_UNARY(head);
+        char *op_text_repr = token_type_str_map[unary->op];
+        printf("%s", op_text_repr);
+        ast_print(unary->expr, str_list, indent, false);
         break;
     }
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
-        char *bin_op_text_repr = token_type_str_map[binary->op];
-        printf("%s", bin_op_text_repr);
+        char *op_text_repr = token_type_str_map[binary->op];
+        printf("%s", op_text_repr);
         ast_print(binary->left, str_list, indent + 1, print_newline);
         ast_print(binary->right, str_list, indent + 1, print_newline);
+        break;
+    }
+    case EXPR_LITERAL: {
+        AstExprLiteral *lit = AS_LITERAL(head);
+        if (lit->lit_type == LIT_NUM) {
+            printf("%d", lit->num_value);
+        } else {
+            printf("%s", str_list[lit->str_list_idx].str);
+        }
         break;
     }
     case EXPR_LIST: {
@@ -55,6 +62,7 @@ void ast_print(AstExpr *head, Str8 *str_list, u32 indent, bool print_newline)
         }
     }
     default:
+        printf("Ast type handled ...\n");
         break;
     }
 }

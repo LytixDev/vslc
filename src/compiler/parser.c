@@ -100,22 +100,13 @@ static void parse_error_append(Parser *parser, Token *failed, ParseErrorType pet
     parser->n_errors++;
 }
 
-static AstExprListNode *make_list_node(Arena *arena, AstExpr *this)
+static AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op)
 {
-    AstExprListNode *node = m_arena_alloc(arena, sizeof(AstExprListNode));
-    node->this = this;
-    node->next = NULL;
-    return node;
-}
-
-static AstExprList *make_list(Arena *arena, AstExpr *head)
-{
-    AstExprList *list = m_arena_alloc(arena, sizeof(AstExprList));
-    list->type = EXPR_LIST;
-    AstExprListNode head_node = { .this = head, .next = NULL };
-    list->head = head_node;
-    list->tail = &list->head;
-    return list;
+    AstExprUnary *unary = m_arena_alloc(arena, sizeof(AstExprUnary));
+    unary->type = EXPR_UNARY;
+    unary->op = op;
+    unary->expr = expr;
+    return unary;
 }
 
 static AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
@@ -140,6 +131,24 @@ static AstExprLiteral *make_literal(Arena *arena, Token token)
         literal->str_list_idx = token.str_list_idx;
     }
     return literal;
+}
+
+static AstExprListNode *make_list_node(Arena *arena, AstExpr *this)
+{
+    AstExprListNode *node = m_arena_alloc(arena, sizeof(AstExprListNode));
+    node->this = this;
+    node->next = NULL;
+    return node;
+}
+
+static AstExprList *make_list(Arena *arena, AstExpr *head)
+{
+    AstExprList *list = m_arena_alloc(arena, sizeof(AstExprList));
+    list->type = EXPR_LIST;
+    AstExprListNode head_node = { .this = head, .next = NULL };
+    list->head = head_node;
+    list->tail = &list->head;
+    return list;
 }
 
 static bool is_bin_op(Token token)
@@ -183,6 +192,11 @@ static AstExpr *parse_primary(Parser *parser)
             fprintf(stderr, "err");
         }
         return expr;
+    }
+    case TOKEN_MINUS: {
+        /* Unary minus */
+        AstExpr *expr = parse_expr(parser, 0);
+        return (AstExpr *)make_unary(&parser->arena, expr, TOKEN_MINUS);
     }
     case TOKEN_NUM:
     case TOKEN_STR:

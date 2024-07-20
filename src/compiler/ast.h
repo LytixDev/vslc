@@ -38,15 +38,6 @@ typedef struct expr_t {
 
 typedef struct {
     AstExprType type;
-    LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
-    union {
-        u32 str_list_idx;
-        s32 num_value;
-    };
-} AstExprLiteral;
-
-typedef struct {
-    AstExprType type;
     TokenType op;
     AstExpr *expr;
 } AstExprUnary;
@@ -58,6 +49,14 @@ typedef struct {
     AstExpr *right;
 } AstExprBinary;
 
+typedef struct {
+    AstExprType type;
+    LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
+    union {
+        u32 str_list_idx;
+        s32 num_value;
+    };
+} AstExprLiteral;
 
 // TODO: Consider other structure than a linked-list
 typedef struct ast_expr_list_node AstExprListNode;
@@ -72,8 +71,9 @@ typedef struct {
     AstExprListNode *tail;
 } AstExprList;
 
-#define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
+#define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
+#define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
 #define AS_LIST(___expr) ((AstExprList *)(___expr))
 
 
