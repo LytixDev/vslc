@@ -16,10 +16,11 @@
  */
 #include "lex.h"
 #include "base/base.h"
+#include <stdio.h>
 #include <string.h>
 
 #ifndef EOF
-#define EOF -1
+#define EOF (-1)
 #endif /* EOF */
 
 
@@ -256,6 +257,8 @@ Token lex_next(Arena *arena, Lexer *lexer)
             return emit(lexer, TOKEN_RPAREN);
         case '=':
             return emit(lexer, TOKEN_EQ);
+        case ',':
+            return emit(lexer, TOKEN_COMMA);
 
         /* Single- or two-character tokens */
         case '<':
@@ -385,13 +388,12 @@ static Token lex_comment(Arena *arena, Lexer *lexer)
     return lex_next(arena, lexer);
 }
 
-/* Debug */
-#include <stdio.h>
+/* Debug stuff */
 char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
-    "ERR",       "NUM",    "STR",        "ASSIGNMENT", "PLUS",  "MINUS",   "STAR",   "SLASH",
-    "LSHIFT",    "RSHIFT", "EQ",         "NEQ",        "LESS",  "GREATER", "LPAREN", "RPAREN",
-    "SEMICOLON", "EOF",    "IDENTIFIER", "FUNC",       "BEGIN", "END",     "RETURN", "PRINT",
-    "BREAK",     "IF",     "THEN",       "ELSE",       "WHILE", "DO",      "VAR",
+    "ERR",       "NUM",    "STR", "ASSIGNMENT", "PLUS", "MINUS",   "STAR",   "SLASH",
+    "LSHIFT",    "RSHIFT", "EQ",  "NEQ",        "LESS", "GREATER", "LPAREN", "RPAREN",
+    "SEMICOLON", "COMMA",  "EOF", "IDENTIFIER", "FUNC", "BEGIN",   "END",    "RETURN",
+    "PRINT",     "BREAK",  "IF",  "THEN",       "ELSE", "WHILE",   "DO",     "VAR",
 };
 
 

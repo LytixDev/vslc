@@ -14,6 +14,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "ast.h"
@@ -41,6 +42,7 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_RPAREN,
     0, // TOKEN_SEMICOLON,
     0, // TOKEN_EOF,
+    0, // TOKEN_COMMA,
     0, // TOKEN_IDENTIFIER,
     0, // TOKEN_FUNC,
     0, // TOKEN_BEGIN,
@@ -57,6 +59,16 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
 };
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
+
+static Token next_token(Parser *parser)
+{
+    Token token = lex_next(&parser->arena, &parser->lexer);
+#ifdef DEBUG
+    token_print(token);
+#endif
+    return token;
+}
+
 
 static ParseError *make_parse_error(Arena *arena, Token *failed, ParseErrorType pet, char *msg)
 {
@@ -88,6 +100,24 @@ static void parse_error_append(Parser *parser, Token *failed, ParseErrorType pet
     parser->n_errors++;
 }
 
+static AstExprListNode *make_list_node(Arena *arena, AstExpr *this)
+{
+    AstExprListNode *node = m_arena_alloc(arena, sizeof(AstExprListNode));
+    node->this = this;
+    node->next = NULL;
+    return node;
+}
+
+static AstExprList *make_list(Arena *arena, AstExpr *head)
+{
+    AstExprList *list = m_arena_alloc(arena, sizeof(AstExprList));
+    list->type = EXPR_LIST;
+    AstExprListNode head_node = { .this = head, .next = NULL };
+    list->head = head_node;
+    list->tail = &list->head;
+    return list;
+}
+
 static AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
 {
     AstExprBinary *binary = m_arena_alloc(arena, sizeof(AstExprBinary));
@@ -112,7 +142,6 @@ static AstExprLiteral *make_literal(Arena *arena, Token token)
     return literal;
 }
 
-
 static bool is_bin_op(Token token)
 {
     switch (token.type) {
@@ -126,7 +155,7 @@ static bool is_bin_op(Token token)
 
 static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
 {
-    Token token = lex_next(&parser->arena, &parser->lexer);
+    Token token = next_token(parser);
     if (token.type != expected) {
         parse_error_append(parser, &token, pet, NULL);
         return (Token){ .type = TOKEN_ERR };
@@ -136,13 +165,14 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
 
 static AstExpr *parse_primary(Parser *parser)
 {
-    Token token = lex_next(&parser->arena, &parser->lexer);
+    Token token = next_token(parser);
     switch (token.type) {
     case TOKEN_LPAREN: {
         AstExpr *expr = parse_expr(parser, 0);
         Token err = consume_or_err(parser, TOKEN_RPAREN, PET_EXPECTED_RPAREN);
         if (err.type == TOKEN_ERR) {
             // TODO: gracefully continue
+            fprintf(stderr, "err");
         }
         return expr;
     }
@@ -165,7 +195,7 @@ static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 p
     if (precedence >= next_precedence)
         return left;
 
-    lex_next(&parser->arena, &parser->lexer);
+    next_token(parser);
     AstExpr *right = parse_expr(parser, next_precedence);
     return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
 }
@@ -185,6 +215,26 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
     return left;
 }
 
+static AstExpr *parse_expr_list(Parser *parser)
+{
+    AstExpr *expr = parse_expr(parser, 0);
+    if (!(lex_peek(&parser->arena, &parser->lexer, 1).type == TOKEN_COMMA)) {
+        return expr;
+    }
+
+    AstExprList *list = make_list(&parser->arena, expr);
+    AstExprListNode *list_node;
+    do {
+        next_token(parser);
+        expr = parse_expr(parser, 0);
+        list_node = make_list_node(&parser->arena, expr);
+        list->tail->next = list_node;
+        list->tail = list_node;
+    } while (lex_peek(&parser->arena, &parser->lexer, 1).type == TOKEN_COMMA);
+
+    return (AstExpr *)list;
+}
+
 ParseResult parse(char *input)
 {
     Parser parser = {
@@ -195,10 +245,12 @@ ParseResult parse(char *input)
     lex_init(&parser.lexer, input);
     m_arena_init_dynamic(&parser.arena, 2, 512);
 
-    AstExpr *head = parse_expr(&parser, 0);
+    AstExpr *head = parse_expr_list(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,
         .head = head,
+        .str_list = parser.lexer.str_list,
+        .str_list_len = parser.lexer.str_list_len,
     };
 }

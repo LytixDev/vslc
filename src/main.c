@@ -62,7 +62,9 @@ int main(int argc, char **argv)
         }
         fprintf(stderr, "[%i] %s\n", i + 1, msg);
     }
-    ast_print(res.head, 0);
+    printf("--- ast print ---\n");
+    ast_print(res.head, 0, true);
 
+    free(res.str_list);
     free(input);
 }

@@ -15,12 +15,15 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ast.h"
+#include "lex.h"
 #include <stdio.h>
 
 
-void ast_print(AstExpr *head, u32 indent)
+void ast_print(AstExpr *head, u32 indent, bool print_newline)
 {
-    putchar('\n');
+    if (print_newline) {
+        putchar('\n');
+    }
     for (u32 i = 0; i < indent; i++) {
         putchar(' ');
     }
@@ -31,13 +34,18 @@ void ast_print(AstExpr *head, u32 indent)
         break;
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
-        if (binary->op == TOKEN_PLUS)
-            printf("+");
-        else
-            printf("*");
-        ast_print(binary->left, indent + 1);
-        ast_print(binary->right, indent + 1);
+        char *bin_op_text_repr = token_type_str_map[binary->op];
+        printf("%s", bin_op_text_repr);
+        ast_print(binary->left, indent + 1, print_newline);
+        ast_print(binary->right, indent + 1, print_newline);
         break;
+    }
+    case EXPR_LIST: {
+        AstExprList *list = AS_LIST(head);
+        for (AstExprListNode *node = &list->head; node != NULL; node = node->next) {
+            ast_print(node->this, indent, false);
+            putchar(',');
+        }
     }
     default:
         break;

@@ -17,7 +17,6 @@
 #ifndef AST_H
 #define AST_H
 
-#include "base/str.h"
 #include "base/types.h"
 #include "lex.h"
 
@@ -25,6 +24,7 @@ typedef enum {
     EXPR_UNARY = 0,
     EXPR_BINARY,
     EXPR_LITERAL,
+    EXPR_LIST,
 } AstExprType;
 
 typedef enum {
@@ -58,17 +58,25 @@ typedef struct {
     AstExpr *right;
 } AstExprBinary;
 
+
+// TODO: Consider other structure than a linked-list
+typedef struct ast_expr_list_node AstExprListNode;
+struct ast_expr_list_node {
+    /* The AstExprListNode's will never be used as regular Expr's, so we don't need a type here */
+    AstExpr *this;
+    AstExprListNode *next;
+};
 typedef struct {
     AstExprType type;
-    AstExpr **exprs;
-    u32 len;
-    u32 cap;
+    AstExprListNode head;
+    AstExprListNode *tail;
 } AstExprList;
 
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
+#define AS_LIST(___expr) ((AstExprList *)(___expr))
 
 
-void ast_print(AstExpr *head, u32 indent);
+void ast_print(AstExpr *head, u32 indent, bool print_newline);
 
 #endif /* AST_H */

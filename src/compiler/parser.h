@@ -47,6 +47,8 @@ typedef struct {
     u32 n_errors;
     ParseError *err_head;
     AstExpr *head;
+    Str8 *str_list; // Heap-alloced
+    u32 str_list_len;
 } ParseResult;
 
 typedef struct {

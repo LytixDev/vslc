@@ -55,6 +55,7 @@ typedef enum {
     TOKEN_LPAREN,
     TOKEN_RPAREN,
     TOKEN_SEMICOLON,
+    TOKEN_COMMA,
     TOKEN_EOF,
 
     // Identifier and reserved words
@@ -120,8 +121,10 @@ void lex_init(Lexer *lexer, char *input);
 Token lex_next(Arena *arena, Lexer *lexer);
 Token lex_peek(Arena *arena, Lexer *lexer, u32 lookahead);
 
-// Debug
+
+/* Debug stuff */
 void token_print(Token token);
+extern char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT];
 
 
 #endif /* LEX_H */
