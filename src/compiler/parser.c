@@ -32,8 +32,8 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     5, // TOKEN_MINUS,
     10, // TOKEN_STAR,
     10, // TOKEN_SLASH,
-    15, // TOKEN_LSHIFT,
-    15, // TOKEN_RSHIFT,
+    4, // TOKEN_LSHIFT,
+    4, // TOKEN_RSHIFT,
     3, // TOKEN_EQ,
     3, // TOKEN_NEQ,
     3, // TOKEN_LESS,
@@ -146,7 +146,15 @@ static bool is_bin_op(Token token)
 {
     switch (token.type) {
     case TOKEN_PLUS:
+    case TOKEN_MINUS:
     case TOKEN_STAR:
+    case TOKEN_SLASH:
+    case TOKEN_LSHIFT:
+    case TOKEN_RSHIFT:
+    case TOKEN_EQ:
+    case TOKEN_NEQ:
+    case TOKEN_LESS:
+    case TOKEN_GREATER:
         return true;
     default:
         return false;

@@ -77,6 +77,6 @@ typedef struct {
 #define AS_LIST(___expr) ((AstExprList *)(___expr))
 
 
-void ast_print(AstExpr *head, u32 indent, bool print_newline);
+void ast_print(AstExpr *head, Str8 *str_list, u32 indent, bool print_newline);
 
 #endif /* AST_H */

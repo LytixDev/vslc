@@ -15,11 +15,12 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ast.h"
+#include "base/str.h"
 #include "lex.h"
 #include <stdio.h>
 
 
-void ast_print(AstExpr *head, u32 indent, bool print_newline)
+void ast_print(AstExpr *head, Str8 *str_list, u32 indent, bool print_newline)
 {
     if (print_newline) {
         putchar('\n');
@@ -29,21 +30,27 @@ void ast_print(AstExpr *head, u32 indent, bool print_newline)
     }
 
     switch (head->type) {
-    case EXPR_LITERAL:
-        printf("%d", AS_LITERAL(head)->num_value);
+    case EXPR_LITERAL: {
+        AstExprLiteral *lit = AS_LITERAL(head);
+        if (lit->type == LIT_NUM) {
+            printf("%d", lit->num_value);
+        } else {
+            printf("%s", str_list[lit->str_list_idx].str);
+        }
         break;
+    }
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
         char *bin_op_text_repr = token_type_str_map[binary->op];
         printf("%s", bin_op_text_repr);
-        ast_print(binary->left, indent + 1, print_newline);
-        ast_print(binary->right, indent + 1, print_newline);
+        ast_print(binary->left, str_list, indent + 1, print_newline);
+        ast_print(binary->right, str_list, indent + 1, print_newline);
         break;
     }
     case EXPR_LIST: {
         AstExprList *list = AS_LIST(head);
         for (AstExprListNode *node = &list->head; node != NULL; node = node->next) {
-            ast_print(node->this, indent, false);
+            ast_print(node->this, str_list, indent, false);
             putchar(',');
         }
     }
