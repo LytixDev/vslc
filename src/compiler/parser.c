@@ -58,9 +58,15 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_VAR,
 };
 
+char *PARSE_ERROR_MSGS[PET_LEN] = {
+    "Expected ')' to terminate the group expression", /* PET_EXPECTED_RPAREN */
+    "", /* PET_CUSTOME */
+};
+
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
 
-static Token next_token(Parser *parser)
+/* Wrapper so we can print the token in debug mode */
+static inline Token next_token(Parser *parser)
 {
     Token token = lex_next(&parser->arena, &parser->lexer);
 #ifdef DEBUG
@@ -209,7 +215,7 @@ static AstExpr *parse_primary(Parser *parser)
 
 static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 precedence)
 {
-    Token next = lex_peek(&parser->arena, &parser->lexer, 1);
+    Token next = lex_peek(&parser->arena, &parser->lexer);
     if (!is_bin_op(next))
         return left;
 
@@ -240,7 +246,7 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
 static AstExpr *parse_expr_list(Parser *parser)
 {
     AstExpr *expr = parse_expr(parser, 0);
-    if (!(lex_peek(&parser->arena, &parser->lexer, 1).type == TOKEN_COMMA)) {
+    if (!(lex_peek(&parser->arena, &parser->lexer).type == TOKEN_COMMA)) {
         return expr;
     }
 
@@ -252,7 +258,7 @@ static AstExpr *parse_expr_list(Parser *parser)
         list_node = make_list_node(&parser->arena, expr);
         list->tail->next = list_node;
         list->tail = list_node;
-    } while (lex_peek(&parser->arena, &parser->lexer, 1).type == TOKEN_COMMA);
+    } while (lex_peek(&parser->arena, &parser->lexer).type == TOKEN_COMMA);
 
     return (AstExpr *)list;
 }

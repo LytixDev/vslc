@@ -29,11 +29,7 @@ typedef enum {
 } ParseErrorType;
 
 
-static char *PARSE_ERROR_MSGS[PET_LEN] = {
-    "Expected ')' to terminate the group expression", /* PET_EXPECTED_RPAREN */
-    "", /* PET_CUSTOME */
-};
-
+extern char *PARSE_ERROR_MSGS[PET_LEN];
 
 typedef struct parse_error_t ParseError;
 struct parse_error_t {

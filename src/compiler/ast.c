@@ -34,7 +34,7 @@ void ast_print(AstExpr *head, Str8 *str_list, u32 indent, bool print_newline)
         AstExprUnary *unary = AS_UNARY(head);
         char *op_text_repr = token_type_str_map[unary->op];
         printf("%s", op_text_repr);
-        ast_print(unary->expr, str_list, indent, false);
+        ast_print(unary->expr, str_list, 1, false);
         break;
     }
     case EXPR_BINARY: {
@@ -60,6 +60,7 @@ void ast_print(AstExpr *head, Str8 *str_list, u32 indent, bool print_newline)
             ast_print(node->this, str_list, indent, false);
             putchar(',');
         }
+        break;
     }
     default:
         printf("Ast type handled ...\n");

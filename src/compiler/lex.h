@@ -105,6 +105,8 @@ typedef struct lexer_t {
     u32 pos_current;
     Point start; // Start point of the current token being processed
     Point current; // Current point in the input
+    bool has_next;
+    Token next;
 
     // TODO: maybe not the best datastructure
     Str8 *str_list;
@@ -119,7 +121,7 @@ typedef struct lexer_t {
 
 void lex_init(Lexer *lexer, char *input);
 Token lex_next(Arena *arena, Lexer *lexer);
-Token lex_peek(Arena *arena, Lexer *lexer, u32 lookahead);
+Token lex_peek(Arena *arena, Lexer *lexer);
 
 
 /* Debug stuff */

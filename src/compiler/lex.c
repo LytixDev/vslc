@@ -198,22 +198,20 @@ void lex_init(Lexer *lexer, char *input)
     lexer->str_list = malloc(sizeof(Str8) * lexer->str_list_cap);
 }
 
-Token lex_peek(Arena *arena, Lexer *lexer, u32 lookahead)
+Token lex_peek(Arena *arena, Lexer *lexer)
 {
-    // TODO: this is stupid because we do work which we later discard that work
-    //       instead we should not reset the state of the lexer, but instead
-    //       store the result of the previous work we did
-    Lexer lexer_save = *lexer;
-    for (u32 i = 0; i < lookahead - 1; i++) {
-        lex_next(arena, lexer);
-    }
-    Token final = lex_next(arena, lexer);
-    *lexer = lexer_save;
-    return final;
+    Token next = lex_next(arena, lexer);
+    lexer->has_next = true;
+    lexer->next = next;
+    return next;
 }
 
 Token lex_next(Arena *arena, Lexer *lexer)
 {
+    if (lexer->has_next) {
+        lexer->has_next = false;
+        return lexer->next;
+    }
     while (1) {
         char c = next(lexer);
         switch (c) {
