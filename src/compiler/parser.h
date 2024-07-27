@@ -23,6 +23,8 @@
 
 typedef enum {
     PET_EXPECTED_RPAREN,
+    PET_EXPECTED_DO,
+    PET_EXPECTED_THEN,
     PET_CUSTOME,
 
     PET_LEN,
@@ -42,7 +44,7 @@ struct parse_error_t {
 typedef struct {
     u32 n_errors;
     ParseError *err_head;
-    AstExpr *head;
+    AstStmt *head;
     Str8 *str_list; // Heap-alloced
     u32 str_list_len;
 } ParseResult;

@@ -40,7 +40,6 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     3, // TOKEN_GREATER,
     0, // TOKEN_LPAREN,
     0, // TOKEN_RPAREN,
-    0, // TOKEN_SEMICOLON,
     0, // TOKEN_EOF,
     0, // TOKEN_COMMA,
     0, // TOKEN_IDENTIFIER,
@@ -60,17 +59,29 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
 
 char *PARSE_ERROR_MSGS[PET_LEN] = {
     "Expected ')' to terminate the group expression", /* PET_EXPECTED_RPAREN */
+    "Expected 'do' keyword to start the while-loop", /* PET_EXPECTED_DO */
+    "Expected 'then' keyword after if-statement condition", /* PET_EXPECTED_THEN */
     "", /* PET_CUSTOME */
 };
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
+static AstStmt *parse_stmt(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
 static inline Token next_token(Parser *parser)
 {
     Token token = lex_next(&parser->arena, &parser->lexer);
 #ifdef DEBUG
-    token_print(token);
+    printf("Consumed: %s\n", token_type_str_map[token.type]);
+#endif
+    return token;
+}
+
+static inline Token peek_token(Parser *parser)
+{
+    Token token = lex_peek(&parser->arena, &parser->lexer);
+#ifdef DEBUG
+    printf("Peek: %s\n", token_type_str_map[token.type]);
 #endif
     return token;
 }
@@ -106,57 +117,6 @@ static void parse_error_append(Parser *parser, Token *failed, ParseErrorType pet
     parser->n_errors++;
 }
 
-static AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op)
-{
-    AstExprUnary *unary = m_arena_alloc(arena, sizeof(AstExprUnary));
-    unary->type = EXPR_UNARY;
-    unary->op = op;
-    unary->expr = expr;
-    return unary;
-}
-
-static AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
-{
-    AstExprBinary *binary = m_arena_alloc(arena, sizeof(AstExprBinary));
-    binary->type = EXPR_BINARY;
-    binary->op = op;
-    binary->left = left;
-    binary->right = right;
-    return binary;
-}
-
-static AstExprLiteral *make_literal(Arena *arena, Token token)
-{
-    AstExprLiteral *literal = m_arena_alloc(arena, sizeof(AstExprLiteral));
-    literal->type = EXPR_LITERAL;
-    if (token.type == TOKEN_NUM) {
-        literal->lit_type = LIT_NUM;
-        literal->num_value = token.num_value;
-    } else {
-        literal->lit_type = LIT_STR;
-        literal->str_list_idx = token.str_list_idx;
-    }
-    return literal;
-}
-
-static AstExprListNode *make_list_node(Arena *arena, AstExpr *this)
-{
-    AstExprListNode *node = m_arena_alloc(arena, sizeof(AstExprListNode));
-    node->this = this;
-    node->next = NULL;
-    return node;
-}
-
-static AstExprList *make_list(Arena *arena, AstExpr *head)
-{
-    AstExprList *list = m_arena_alloc(arena, sizeof(AstExprList));
-    list->type = EXPR_LIST;
-    AstExprListNode head_node = { .this = head, .next = NULL };
-    list->head = head_node;
-    list->tail = &list->head;
-    return list;
-}
-
 static bool is_bin_op(Token token)
 {
     switch (token.type) {
@@ -178,11 +138,13 @@ static bool is_bin_op(Token token)
 
 static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
 {
-    Token token = next_token(parser);
+    Token token = peek_token(parser);
     if (token.type != expected) {
+        next_token(parser);
         parse_error_append(parser, &token, pet, NULL);
         return (Token){ .type = TOKEN_ERR };
     }
+    next_token(parser);
     return token;
 }
 
@@ -215,7 +177,7 @@ static AstExpr *parse_primary(Parser *parser)
 
 static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 precedence)
 {
-    Token next = lex_peek(&parser->arena, &parser->lexer);
+    Token next = peek_token(parser);
     if (!is_bin_op(next))
         return left;
 
@@ -246,7 +208,7 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
 static AstExpr *parse_expr_list(Parser *parser)
 {
     AstExpr *expr = parse_expr(parser, 0);
-    if (!(lex_peek(&parser->arena, &parser->lexer).type == TOKEN_COMMA)) {
+    if (!(peek_token(parser).type == TOKEN_COMMA)) {
         return expr;
     }
 
@@ -258,9 +220,58 @@ static AstExpr *parse_expr_list(Parser *parser)
         list_node = make_list_node(&parser->arena, expr);
         list->tail->next = list_node;
         list->tail = list_node;
-    } while (lex_peek(&parser->arena, &parser->lexer).type == TOKEN_COMMA);
+    } while (peek_token(parser).type == TOKEN_COMMA);
 
     return (AstExpr *)list;
+}
+
+
+/* Parsing of statements */
+static AstStmtPrint *parse_print(Parser *parser)
+{
+    /* Came from TOKEN_PRINT */
+    AstExpr *print_list = parse_expr_list(parser);
+    return make_print(&parser->arena, print_list);
+}
+
+static AstStmtWhile *parse_while(Parser *parser)
+{
+    /* Came from TOKEN_WHILE */
+    AstExpr *condition = parse_expr(parser, 0);
+    consume_or_err(parser, TOKEN_DO, PET_EXPECTED_DO);
+    AstStmt *body = parse_stmt(parser);
+    return make_while(&parser->arena, condition, body);
+}
+
+static AstStmtIf *parse_if(Parser *parser)
+{
+    /* Came from TOKEN_IF */
+    AstExpr *condition = parse_expr(parser, 0);
+    consume_or_err(parser, TOKEN_THEN, PET_EXPECTED_THEN);
+    AstStmt *then = parse_stmt(parser);
+    AstStmt *else_ = NULL;
+    if (peek_token(parser).type == TOKEN_ELSE) {
+        next_token(parser);
+        else_ = parse_stmt(parser);
+    }
+
+    return make_if(&parser->arena, condition, then, else_);
+}
+
+static AstStmt *parse_stmt(Parser *parser)
+{
+    Token token = next_token(parser);
+    switch (token.type) {
+    case TOKEN_WHILE:
+        return (AstStmt *)parse_while(parser);
+    case TOKEN_IF:
+        return (AstStmt *)parse_if(parser);
+    case TOKEN_PRINT:
+        return (AstStmt *)parse_print(parser);
+    default:
+        parse_error_append(parser, &token, PET_CUSTOME, "Unrecognized token ...");
+        return NULL;
+    }
 }
 
 ParseResult parse(char *input)
@@ -273,7 +284,7 @@ ParseResult parse(char *input)
     lex_init(&parser.lexer, input);
     m_arena_init_dynamic(&parser.arena, 2, 512);
 
-    AstExpr *head = parse_expr_list(&parser);
+    AstStmt *head = parse_stmt(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,

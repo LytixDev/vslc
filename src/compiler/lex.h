@@ -54,7 +54,6 @@ typedef enum {
     // Misc..
     TOKEN_LPAREN,
     TOKEN_RPAREN,
-    TOKEN_SEMICOLON,
     TOKEN_COMMA,
     TOKEN_EOF,
 
