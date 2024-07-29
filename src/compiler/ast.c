@@ -28,8 +28,8 @@ char *expr_type_str_map[EXPR_TYPE_LEN] = {
 };
 
 char *stmt_type_str_map[STMT_TYPE_LEN] = {
-    "STMT_WHILE", "STMT_IF",    "STMT_ABRUPT",     "STMT_LIST",
-    "STMT_PRINT", "STMT_BLOCK", "STMT_ASSIGNMENT", "STMT_FUNC",
+    "STMT_WHILE", "STMT_IF",         "STMT_ABRUPT", "STMT_LIST",        "STMT_PRINT",
+    "STMT_BLOCK", "STMT_ASSIGNMENT", "STMT_FUNC",   "STMT_DECLARATION",
 };
 
 
@@ -87,23 +87,23 @@ AstExprList *make_list(Arena *arena, AstExpr *head)
 
 
 /* Statements */
-// AstStmtListNode *make_stmt_list_node(Arena *arena, AstStmt *this)
-// {
-//     AstStmtListNode *node = m_arena_alloc(arena, sizeof(AstStmtListNode));
-//     node->this = this;
-//     node->next = NULL;
-//     return node;
-// }
-//
-// AstStmtList *make_stmt_list(Arena *arena, AstStmt *head)
-// {
-//     AstStmtList *list = m_arena_alloc(arena, sizeof(AstStmtList));
-//     list->type = STMT_LIST;
-//     AstStmtListNode head_node = { .this = head, .next = NULL };
-//     list->head = head_node;
-//     list->tail = &list->head;
-//     return list;
-// }
+AstStmtListNode *make_stmt_list_node(Arena *arena, AstStmt *this)
+{
+    AstStmtListNode *node = m_arena_alloc(arena, sizeof(AstStmtListNode));
+    node->this = this;
+    node->next = NULL;
+    return node;
+}
+
+AstStmtList *make_stmt_list(Arena *arena, AstStmt *head)
+{
+    AstStmtList *list = m_arena_alloc(arena, sizeof(AstStmtList));
+    list->type = STMT_LIST;
+    AstStmtListNode head_node = { .this = head, .next = NULL };
+    list->head = head_node;
+    list->tail = &list->head;
+    return list;
+}
 
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body)
 {
@@ -129,6 +129,18 @@ AstStmtPrint *make_print(Arena *arena, AstExpr *print_list)
     AstStmtPrint *stmt = m_arena_alloc(arena, sizeof(AstStmtPrint));
     stmt->type = STMT_PRINT;
     stmt->print_list = print_list;
+    return stmt;
+}
+
+AstStmtDeclaration *make_declaration(Arena *arena);
+
+
+AstStmtBlock *make_block(Arena *arena, AstStmtList *declarations, AstStmtList *stmts)
+{
+    AstStmtBlock *stmt = m_arena_alloc(arena, sizeof(AstStmtBlock));
+    stmt->type = STMT_BLOCK;
+    stmt->declarations = declarations;
+    stmt->stmts = stmts;
     return stmt;
 }
 
@@ -193,7 +205,6 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
         ast_print_expr(stmt->condition, str_list, indent + 1);
         ast_print(stmt->body, str_list, indent + 1);
     }; break;
-
     case STMT_IF: {
         AstStmtIf *stmt = AS_IF(head);
         ast_print_expr(stmt->condition, str_list, indent + 1);
@@ -202,12 +213,16 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
             ast_print(stmt->else_, str_list, indent + 1);
         }
     }; break;
-
     case STMT_PRINT: {
         AstStmtPrint *stmt = AS_PRINT(head);
         ast_print_expr(stmt->print_list, str_list, indent + 1);
     }; break;
-
+    case STMT_BLOCK: {
+        AstStmtBlock *stmt = AS_BLOCK(head);
+        for (AstStmtListNode *node = &stmt->stmts->head; node != NULL; node = node->next) {
+            ast_print(node->this, str_list, indent + 1);
+        }
+    }; break;
     default:
         printf("NOT HANDLED");
     }

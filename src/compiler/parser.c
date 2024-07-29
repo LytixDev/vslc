@@ -126,6 +126,15 @@ static bool is_bin_op(Token token)
     case TOKEN_SLASH:
     case TOKEN_LSHIFT:
     case TOKEN_RSHIFT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool is_relation_op(Token token)
+{
+    switch (token.type) {
     case TOKEN_EQ:
     case TOKEN_NEQ:
     case TOKEN_LESS:
@@ -167,7 +176,6 @@ static AstExpr *parse_primary(Parser *parser)
         return (AstExpr *)make_unary(&parser->arena, expr, TOKEN_MINUS);
     }
     case TOKEN_NUM:
-    case TOKEN_STR:
     case TOKEN_IDENTIFIER:
         return (AstExpr *)make_literal(&parser->arena, token);
     default:
@@ -205,8 +213,9 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
     return left;
 }
 
-static AstExpr *parse_expr_list(Parser *parser)
+static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
 {
+    /* allow_str is true means the list parsers strings and/or exprs */
     AstExpr *expr = parse_expr(parser, 0);
     if (!(peek_token(parser).type == TOKEN_COMMA)) {
         return expr;
@@ -216,7 +225,11 @@ static AstExpr *parse_expr_list(Parser *parser)
     AstExprListNode *list_node;
     do {
         next_token(parser);
-        expr = parse_expr(parser, 0);
+        if (allow_str && peek_token(parser).type == TOKEN_STR) {
+            expr = (AstExpr *)make_literal(&parser->arena, next_token(parser));
+        } else {
+            expr = parse_expr(parser, 0);
+        }
         list_node = make_list_node(&parser->arena, expr);
         list->tail->next = list_node;
         list->tail = list_node;
@@ -230,7 +243,7 @@ static AstExpr *parse_expr_list(Parser *parser)
 static AstStmtPrint *parse_print(Parser *parser)
 {
     /* Came from TOKEN_PRINT */
-    AstExpr *print_list = parse_expr_list(parser);
+    AstExpr *print_list = parse_expr_list(parser, true);
     return make_print(&parser->arena, print_list);
 }
 
@@ -258,6 +271,32 @@ static AstStmtIf *parse_if(Parser *parser)
     return make_if(&parser->arena, condition, then, else_);
 }
 
+static AstStmtBlock *parse_block(Parser *parser)
+{
+    /* Came from TOKEN_BLOCK */
+    AstStmt *first = parse_stmt(parser);
+    AstStmtList *stmts = make_stmt_list(&parser->arena, first);
+
+    Token next;
+    while ((next = peek_token(parser)).type != TOKEN_END) {
+        if (next.type == TOKEN_EOF) {
+            parse_error_append(parser, &next, PET_CUSTOME,
+                               "Unexpected EOF inside a block. Expected END");
+            break;
+        }
+        AstStmt *stmt = parse_stmt(parser);
+        AstStmtListNode *list_node = make_stmt_list_node(&parser->arena, stmt);
+        stmts->tail->next = list_node;
+        stmts->tail = list_node;
+    }
+
+    /* Consume the END token */
+    if (next.type != TOKEN_EOF) {
+        next_token(parser);
+    }
+    return make_block(&parser->arena, NULL, stmts);
+}
+
 static AstStmt *parse_stmt(Parser *parser)
 {
     Token token = next_token(parser);
@@ -268,6 +307,8 @@ static AstStmt *parse_stmt(Parser *parser)
         return (AstStmt *)parse_if(parser);
     case TOKEN_PRINT:
         return (AstStmt *)parse_print(parser);
+    case TOKEN_BEGIN:
+        return (AstStmt *)parse_block(parser);
     default:
         parse_error_append(parser, &token, PET_CUSTOME, "Unrecognized token ...");
         return NULL;
