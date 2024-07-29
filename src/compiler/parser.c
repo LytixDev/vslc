@@ -101,6 +101,10 @@ static ParseError *make_parse_error(Arena *arena, Token *failed, ParseErrorType 
     parse_error->type = pet;
     parse_error->failed = failed;
     parse_error->next = NULL;
+
+#ifdef DEBUG
+    fprintf(stderr, "%s\n", msg);
+#endif
     return parse_error;
 }
 
@@ -213,10 +217,28 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
     return left;
 }
 
+static AstExprBinary *parse_relation(Parser *parser)
+{
+    AstExpr *left = parse_expr(parser, 0);
+    Token op = peek_token(parser);
+    if (!is_relation_op(op)) {
+        make_parse_error(&parser->arena, &op, PET_CUSTOME, "Expected a relation operator.");
+    } else {
+        next_token(parser);
+    }
+    AstExpr *right = parse_expr(parser, 0);
+    return make_binary(&parser->arena, left, op.type, right);
+}
+
 static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
 {
     /* allow_str is true means the list parsers strings and/or exprs */
-    AstExpr *expr = parse_expr(parser, 0);
+    AstExpr *expr;
+    if (allow_str && peek_token(parser).type == TOKEN_STR) {
+        expr = (AstExpr *)make_literal(&parser->arena, next_token(parser));
+    } else {
+        expr = parse_expr(parser, 0);
+    }
     if (!(peek_token(parser).type == TOKEN_COMMA)) {
         return expr;
     }
@@ -250,7 +272,7 @@ static AstStmtPrint *parse_print(Parser *parser)
 static AstStmtWhile *parse_while(Parser *parser)
 {
     /* Came from TOKEN_WHILE */
-    AstExpr *condition = parse_expr(parser, 0);
+    AstExpr *condition = (AstExpr *)parse_relation(parser);
     consume_or_err(parser, TOKEN_DO, PET_EXPECTED_DO);
     AstStmt *body = parse_stmt(parser);
     return make_while(&parser->arena, condition, body);
@@ -259,7 +281,7 @@ static AstStmtWhile *parse_while(Parser *parser)
 static AstStmtIf *parse_if(Parser *parser)
 {
     /* Came from TOKEN_IF */
-    AstExpr *condition = parse_expr(parser, 0);
+    AstExpr *condition = (AstExpr *)parse_relation(parser);
     consume_or_err(parser, TOKEN_THEN, PET_EXPECTED_THEN);
     AstStmt *then = parse_stmt(parser);
     AstStmt *else_ = NULL;
