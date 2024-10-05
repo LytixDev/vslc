@@ -25,14 +25,14 @@
  * Size does not include null terminator.
  */
 typedef struct {
-	u8 *str;
-	size_t len;
+    u8 *str;
+    size_t len;
 } Str8;
 
 typedef struct {
     Arena *arena;
     Str8 str;
-	u32 cap;
+    u32 cap;
 } StrBuilder;
 
 /*
@@ -43,7 +43,7 @@ typedef Str8 StrView8;
 
 
 StrBuilder make_str_builder(Arena *arena);
-//void str_builder_append_str8(StrBuilder *sb, Str8 str);
+// void str_builder_append_str8(StrBuilder *sb, Str8 str);
 void str_builder_append_u8(StrBuilder *sb, u8 c);
 void str_builder_append_cstr(StrBuilder *sb, char *cstr, u32 len);
 

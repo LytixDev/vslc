@@ -26,11 +26,11 @@
 
 void test_lexer(void)
 {
-    char *input = "var ten = 10;";
+    char *input = "var a = \"some_str\"; // ignored\nvar b = \"not_ignored\"";
     Lexer lexer;
     Arena arena;
     lex_init(&lexer, input);
-	m_arena_init_dynamic(&arena, 2, 512);
+    m_arena_init_dynamic(&arena, 2, 512);
 
     printf("input: '%s'\n", input);
     while (1) {

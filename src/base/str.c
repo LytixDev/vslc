@@ -17,11 +17,12 @@
 #include <string.h>
 
 #include "sac_single.h"
-#include "types.h"
 #include "str.h"
+#include "types.h"
 
 
-StrBuilder make_str_builder(Arena *arena) {
+StrBuilder make_str_builder(Arena *arena)
+{
     StrBuilder sb = {
         .arena = arena,
         .str = (Str8){ .len = 0 },
@@ -45,7 +46,7 @@ void str_builder_append_u8(StrBuilder *sb, u8 c)
 
 void str_builder_append_cstr(StrBuilder *sb, char *cstr, u32 len)
 {
-    while (sb->str.len + len < sb->cap) {
+    while (sb->str.len + len > sb->cap) {
         /* Double the allocation */
         (void)m_arena_alloc(sb->arena, sb->cap);
         sb->cap *= 2;

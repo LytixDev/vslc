@@ -22,39 +22,39 @@
 #include "lex.h"
 
 typedef enum {
-	PET_EXPECTED_RPAREN,
-	PET_CUSTOME,
+    PET_EXPECTED_RPAREN,
+    PET_EXPECTED_DO,
+    PET_EXPECTED_THEN,
+    PET_CUSTOME,
 
-	PET_LEN,
+    PET_LEN,
 } ParseErrorType;
 
 
-static char *PARSE_ERROR_MSGS[PET_LEN] = {
-	"Expected ')' to terminate the group expression", /* PET_EXPECTED_RPAREN */
-	"", /* PET_CUSTOME */
-};
-
+extern char *PARSE_ERROR_MSGS[PET_LEN];
 
 typedef struct parse_error_t ParseError;
 struct parse_error_t {
-	ParseErrorType type;
-	ParseError *next;
-	char *msg; // @NULLABLE. If NULL then use the error message based on the type.
-	Token *failed; // The token that caused the error
+    ParseErrorType type;
+    ParseError *next;
+    char *msg; // @NULLABLE. If NULL then use the error message based on the type.
+    Token *failed; // The token that caused the error
 };
 
 typedef struct {
-	u32 n_errors;
-	ParseError *err_head;
-	AstExpr *head;
+    u32 n_errors;
+    ParseError *err_head;
+    AstStmt *head;
+    Str8 *str_list; // Heap-alloced
+    u32 str_list_len;
 } ParseResult;
 
 typedef struct {
-	Arena arena; // Allocator for all dynamic allocations performed by the parser
-	Lexer lexer;
-	u32 n_errors;
-	ParseError *err_head;
-	ParseError *err_tail;
+    Arena arena; // Allocator for all dynamic allocations performed by the parser
+    Lexer lexer;
+    u32 n_errors;
+    ParseError *err_head;
+    ParseError *err_tail;
 } Parser;
 
 ParseResult parse(char *input);
