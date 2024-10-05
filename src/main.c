@@ -15,7 +15,6 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <stdio.h>
-#include <sys/stat.h> // TODO: should be behind an OS layer
 
 #include "compiler/ast.h"
 #include "compiler/parser.h"
@@ -24,35 +23,8 @@
 #include "base/sac_single.h"
 
 
-int main(int argc, char **argv)
+u32 parser(char *input)
 {
-    if (argc != 2) {
-        fprintf(stderr, "Expected filename argument");
-        return 1;
-    }
-
-    /* Read input file */
-    char *file_path = argv[1];
-    struct stat st;
-    if (stat(file_path, &st) != 0) {
-        fprintf(stderr, "Could not stat file '%s'\n", file_path);
-        return 1;
-    }
-
-    size_t input_size = st.st_size;
-    char *input = malloc(sizeof(char) * (input_size + 1));
-    input[input_size] = 0;
-    FILE *fp = fopen(file_path, "r");
-    if (fp == NULL) {
-        fprintf(stderr, "Could not open file '%s'\n", file_path);
-        return 1;
-    }
-    if (fread(input, sizeof(char), st.st_size, fp) != input_size) {
-        fprintf(stderr, "Could not read file '%s'\n", file_path);
-        return 1;
-    }
-    fclose(fp);
-
     ParseResult res = parse(input);
     ParseError *parse_error = res.err_head;
     for (u32 i = 0; i < res.n_errors; i++) {
@@ -62,10 +34,32 @@ int main(int argc, char **argv)
         }
         fprintf(stderr, "[%i] %s\n", i + 1, msg);
     }
-    printf("--- ast print ---\n");
     ast_print(res.head, res.str_list, 0);
     printf("\n");
 
     free(res.str_list);
-    free(input);
+
+    return res.n_errors;
+}
+
+
+int main(void)
+{
+    Arena input_arena;
+    m_arena_init_dynamic(&input_arena, 1, 32);
+    char *input = m_arena_alloc_zero(&input_arena, 4096);
+    char c;
+    u32 i = 0;
+    while ((c = getchar()) != EOF) {
+        if (input_arena.offset > input_arena.pages_commited * 4096) {
+            m_arena_alloc_zero(&input_arena, 4096);
+        }
+        input[i] = c;
+        i++;
+    }
+
+    u32 n_errors = parser(input);
+    if (n_errors == 0)
+        return 0;
+    return 1;
 }
