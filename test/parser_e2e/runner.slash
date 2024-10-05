@@ -1,0 +1,27 @@
+#!/usr/local/bin/slash
+
+var files = (find "cases/" -type f)
+
+loop file in $files {
+    echo "Check:" $file
+    var content = (cat $file)
+    
+    var given  = (echo $content | sed -n '/^--- GIVEN ---$/,/^--- EXPECT ---$/p' | sed '1d;$d')
+    var expect = (echo $content | sed -n '/^--- EXPECT ---$/,$p' | sed '1d')
+    
+    var actual = (echo $given | ./vslc-parser)
+    
+    # Make temporary files
+    var expect_file = (mktemp)
+    var actual_file = (mktemp)
+    
+    echo $expect > $expect_file
+    echo $actual > $actual_file
+    
+    # Compare expected vs actual
+    diff $actual_file $expect_file
+    
+    # Remove temporary files
+    rm $expect_file $actual_file
+}
+
