@@ -1,9 +1,11 @@
 #!/usr/local/bin/slash
 
 var files = (find "cases/" -type f)
+var successes = 0
+var tests = (echo $files | wc -l)
 
 loop file in $files {
-    echo "Check:" $file
+    printf '\033[94mCheck %s:\033[0m\n' $file
     var content = (cat $file)
     
     var given  = (echo $content | sed -n '/^--- GIVEN ---$/,/^--- EXPECT ---$/p' | sed '1d;$d')
@@ -18,10 +20,17 @@ loop file in $files {
     echo $expect > $expect_file
     echo $actual > $actual_file
     
-    # Compare expected vs actual
-    diff $actual_file $expect_file
+    # Compare expected vs actual using diff. -Z to ignore trailing whitespace.
+    diff -Z $actual_file $expect_file
+    if $? == 0 {
+        $successes += 1
+        printf '\033[92mSucceeded\033[0m\n\n'
+    } else {
+        printf '\033[91mFailed\033[0m\n\n'
+    }
     
     # Remove temporary files
     rm $expect_file $actual_file
 }
 
+echo $successes "out of" $tests "tests succeeded"
