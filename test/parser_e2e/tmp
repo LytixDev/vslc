@@ -1,5 +1,0 @@
-if 1 > 10
-then 
-    print "something"
-else
-    print "something else"

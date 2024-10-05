@@ -1,0 +1,11 @@
+--- GIVEN ---
+print 1 + 2 * 3
+--- EXPECT ---
+STMT_PRINT
+ EXPR_BINARY
+  op: PLUS
+  EXPR_LITERAL 1
+  EXPR_BINARY
+   op: STAR
+   EXPR_LITERAL 2
+   EXPR_LITERAL 3

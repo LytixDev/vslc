@@ -68,6 +68,17 @@ static bool ast_cmp(AstExpr *a, AstExpr *b)
         } while (node_a != NULL && node_b != NULL);
         return true;
     }
+    case EXPR_CALL: {
+        AstExprCall *A = AS_CALL(a);
+        AstExprCall *B = AS_CALL(b);
+        if (A->identifier != B->identifier) {
+            return false;
+        }
+        if (A->args == NULL || B->args == NULL) {
+            return A->args == NULL && B->args == NULL;
+        }
+        return ast_cmp(A->args, B->args);
+    };
     }
 
     return true;
