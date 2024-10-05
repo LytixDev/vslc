@@ -21,10 +21,7 @@
 
 
 char *expr_type_str_map[EXPR_TYPE_LEN] = {
-    "EXPR_UNARY",
-    "EXPR_BINARY",
-    "EXPR_LITERAL",
-    "EXPR_LIST",
+    "EXPR_UNARY", "EXPR_BINARY", "EXPR_LITERAL", "EXPR_LIST", "EXPR_CALL",
 };
 
 char *stmt_type_str_map[STMT_TYPE_LEN] = {
@@ -65,6 +62,15 @@ AstExprLiteral *make_literal(Arena *arena, Token token)
         literal->str_list_idx = token.str_list_idx;
     }
     return literal;
+}
+
+AstExprCall *make_call(Arena *arena, u32 identifier, AstExpr *args)
+{
+    AstExprCall *call = m_arena_alloc(arena, sizeof(AstExprCall));
+    call->type = EXPR_CALL;
+    call->identifier = identifier;
+    call->args = args;
+    return call;
 }
 
 AstExprListNode *make_list_node(Arena *arena, AstExpr *this)
@@ -162,7 +168,7 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
         AstExprUnary *unary = AS_UNARY(head);
         char *op_text_repr = token_type_str_map[unary->op];
         printf("%s", op_text_repr);
-        ast_print_expr(unary->expr, str_list, 1);
+        ast_print_expr(unary->expr, str_list, indent + 1);
     } break;
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
@@ -187,6 +193,13 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
             ast_print_expr(node->this, str_list, indent + 1);
         }
     } break;
+    case EXPR_CALL: {
+        AstExprCall *call = AS_CALL(head);
+        printf("%s", str_list[call->identifier].str);
+        if (call->args) {
+            ast_print_expr(call->args, str_list, indent + 1);
+        }
+    } break;
     default:
         printf("Ast type handled ...\n");
     }
@@ -194,6 +207,9 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
 
 void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
 {
+    if (head == NULL) {
+        return;
+    }
     if (indent != 0) {
         putchar('\n');
     }

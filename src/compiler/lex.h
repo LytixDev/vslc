@@ -54,6 +54,8 @@ typedef enum {
     // Misc..
     TOKEN_LPAREN,
     TOKEN_RPAREN,
+    TOKEN_LBRACKET,
+    TOKEN_RBRACKET,
     TOKEN_COMMA,
     TOKEN_EOF,
 
@@ -104,6 +106,7 @@ typedef struct lexer_t {
     u32 pos_current;
     Point start; // Start point of the current token being processed
     Point current; // Current point in the input
+    // TODO: If we want to store more than one next token we could use a ring buffer
     bool has_next;
     Token next;
 

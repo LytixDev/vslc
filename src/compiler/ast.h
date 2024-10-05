@@ -26,6 +26,7 @@ typedef enum {
     EXPR_BINARY,
     EXPR_LITERAL,
     EXPR_LIST,
+    EXPR_CALL,
     EXPR_TYPE_LEN,
 } AstExprType;
 
@@ -72,6 +73,12 @@ typedef struct {
     AstExprListNode head;
     AstExprListNode *tail;
 } AstExprList;
+
+typedef struct {
+    AstExprType type;
+    u32 identifier; // Index into str_list
+    AstExpr *args; // @NULLABLE. type should either be Literal or List
+} AstExprCall;
 
 /* Statements */
 typedef enum {
@@ -137,6 +144,7 @@ typedef struct {
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
 #define AS_LIST(___expr) ((AstExprList *)(___expr))
+#define AS_CALL(___expr) ((AstExprCall *)(___expr))
 
 #define AS_WHILE(___stmt) ((AstStmtWhile *)(___stmt))
 #define AS_IF(___stmt) ((AstStmtIf *)(___stmt))
@@ -153,6 +161,7 @@ AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *r
 AstExprLiteral *make_literal(Arena *arena, Token token);
 AstExprListNode *make_list_node(Arena *arena, AstExpr *this);
 AstExprList *make_list(Arena *arena, AstExpr *head);
+AstExprCall *make_call(Arena *arena, u32 identifier, AstExpr *args);
 
 /* Statements */
 AstStmtListNode *make_stmt_list_node(Arena *arena, AstStmt *this);

@@ -65,6 +65,7 @@ char *PARSE_ERROR_MSGS[PET_LEN] = {
 };
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
+static AstExpr *parse_expr_list(Parser *parser, bool allow_str);
 static AstStmt *parse_stmt(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
@@ -180,9 +181,31 @@ static AstExpr *parse_primary(Parser *parser)
         return (AstExpr *)make_unary(&parser->arena, expr, TOKEN_MINUS);
     }
     case TOKEN_NUM:
-    case TOKEN_IDENTIFIER:
-        return (AstExpr *)make_literal(&parser->arena, token);
+    case TOKEN_IDENTIFIER: {
+        Token next = peek_token(parser);
+        if (next.type == TOKEN_LPAREN) {
+            /* Parse function call */
+            next_token(parser);
+            AstExpr *expr_list = NULL;
+            if (peek_token(parser).type == TOKEN_RPAREN) {
+                next_token(parser);
+            } else {
+                expr_list = parse_expr_list(parser, true);
+            }
+            return (AstExpr *)make_call(&parser->arena, token.str_list_idx, expr_list);
+        } else if (next.type == TOKEN_LBRACKET) {
+            /* Parse array indexing as a binary op */
+            next_token(parser);
+            AstExpr *left = (AstExpr *)make_literal(&parser->arena, token);
+            AstExpr *right = parse_expr(parser, 0);
+            return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
+        } else {
+            /* Parse single identifier */
+            return (AstExpr *)make_literal(&parser->arena, token);
+        }
+    }
     default:
+        // TODO: gracefully continue
         ASSERT_NOT_REACHED;
     }
 }
@@ -240,6 +263,8 @@ static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
         expr = parse_expr(parser, 0);
     }
     if (!(peek_token(parser).type == TOKEN_COMMA)) {
+        // TODO: We could simplify certain parts of the compiler of the expr list always
+        //       wrapped a single literal inside a list.
         return expr;
     }
 
