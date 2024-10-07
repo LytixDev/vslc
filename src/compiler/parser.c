@@ -62,6 +62,7 @@ char *PARSE_ERROR_MSGS[PET_LEN] = {
     "Expected ']' to terminate the array indexing", /* PET_EXPECTED_RBRACKET */
     "Expected 'do' keyword to start the while-loop", /* PET_EXPECTED_DO */
     "Expected 'then' keyword after if-statement condition", /* PET_EXPECTED_THEN */
+    "Expected ')' to end function call ", /* PET_EXPCETED_CALL_END */
     "", /* PET_CUSTOME */
 };
 
@@ -84,9 +85,9 @@ static inline Token peek_token(Parser *parser)
     // TODO: if we need more lookahead, this must change
     // assert(!parser->lexer.has_next);
     Token token = lex_peek(&parser->arena, &parser->lexer);
-#ifdef DEBUG
-    printf("Peek: %s\n", token_type_str_map[token.type]);
-#endif
+//#ifdef DEBUG
+//    printf("Peek: %s\n", token_type_str_map[token.type]);
+//#endif
     return token;
 }
 
@@ -175,6 +176,7 @@ static AstExprCall *parse_call(Parser *parser, Token identifier)
         next_token(parser);
     } else {
         expr_list = parse_expr_list(parser, true);
+        consume_or_err(parser, TOKEN_RPAREN, PET_EXPCETED_CALL_END);
     }
     return make_call(&parser->arena, identifier.str_list_idx, expr_list);
 }
