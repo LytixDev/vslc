@@ -25,8 +25,9 @@ char *expr_type_str_map[EXPR_TYPE_LEN] = {
 };
 
 char *stmt_type_str_map[STMT_TYPE_LEN] = {
-    "STMT_WHILE", "STMT_IF",         "STMT_ABRUPT", "STMT_LIST",        "STMT_PRINT",
-    "STMT_BLOCK", "STMT_ASSIGNMENT", "STMT_FUNC",   "STMT_DECLARATION",
+    "STMT_WHILE",           "STMT_IF",           "STMT_ABRUPT", "STMT_ABRUPT_BREAK",
+    "STMT_ABRUPT_CONTINUE", "STMT_BREAK_RETURN", "STMT_LIST",   "STMT_PRINT", "STMT_EXPR",
+    "STMT_BLOCK",           "STMT_ASSIGNMENT",   "STMT_FUNC",   "STMT_DECLARATION",
 };
 
 
@@ -58,7 +59,7 @@ AstExprLiteral *make_literal(Arena *arena, Token token)
         literal->lit_type = LIT_NUM;
         literal->num_value = token.num_value;
     } else {
-        literal->lit_type = LIT_STR;
+        literal->lit_type = token.type == TOKEN_IDENTIFIER ? LIT_IDENT : LIT_STR;
         literal->str_list_idx = token.str_list_idx;
     }
     return literal;
@@ -130,11 +131,19 @@ AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *els
     return stmt;
 }
 
-AstStmtPrint *make_print(Arena *arena, AstExpr *print_list)
+AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstExpr *print_list)
 {
-    AstStmtPrint *stmt = m_arena_alloc(arena, sizeof(AstStmtPrint));
-    stmt->type = STMT_PRINT;
+    AstStmtSingle *stmt = m_arena_alloc(arena, sizeof(AstStmtSingle));
+    stmt->type = single_type;
     stmt->print_list = print_list;
+    return stmt;
+}
+
+AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr)
+{
+    AstStmtAbrupt *stmt = m_arena_alloc(arena, sizeof(AstStmtAbrupt));
+    stmt->type = abrupt_type;
+    stmt->expr = expr;
     return stmt;
 }
 
@@ -149,6 +158,16 @@ AstStmtBlock *make_block(Arena *arena, AstStmtList *declarations, AstStmtList *s
     stmt->stmts = stmts;
     return stmt;
 }
+
+AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
+{
+    AstStmtAssignment *stmt = m_arena_alloc(arena, sizeof(AstStmtAssignment));
+    stmt->type = STMT_ASSIGNMENT;
+    stmt->left = left;
+    stmt->right = right;
+    return stmt;
+}
+
 
 static void print_indent(u32 indent)
 {
@@ -229,8 +248,9 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
             ast_print(stmt->else_, str_list, indent + 1);
         }
     }; break;
+    case STMT_EXPR:
     case STMT_PRINT: {
-        AstStmtPrint *stmt = AS_PRINT(head);
+        AstStmtSingle *stmt = AS_SINGLE(head);
         ast_print_expr(stmt->print_list, str_list, indent + 1);
     }; break;
     case STMT_BLOCK: {
@@ -238,6 +258,20 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
         for (AstStmtListNode *node = &stmt->stmts->head; node != NULL; node = node->next) {
             ast_print(node->this, str_list, indent + 1);
         }
+    }; break;
+    case STMT_ABRUPT:
+    case STMT_ABRUPT_BREAK:
+    case STMT_ABRUPT_CONTINUE:
+    case STMT_ABRUPT_RETURN: {
+        AstStmtAbrupt *stmt = AS_ABRUPT(head);
+        if (stmt->expr != NULL) {
+            ast_print_expr(stmt->expr, str_list, indent + 1);
+        }
+    }; break;
+    case STMT_ASSIGNMENT: {
+        AstStmtAssignment *stmt = AS_ASSIGNMENT(head);
+        ast_print_expr(stmt->left, str_list, indent + 1);
+        ast_print_expr(stmt->right, str_list, indent + 1);
     }; break;
     default:
         printf("NOT HANDLED");

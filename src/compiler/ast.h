@@ -32,6 +32,7 @@ typedef enum {
 
 typedef enum {
     LIT_STR,
+    LIT_IDENT,
     LIT_NUM,
 } LiteralType;
 
@@ -84,9 +85,15 @@ typedef struct {
 typedef enum {
     STMT_WHILE = 0,
     STMT_IF,
-    STMT_ABRUPT, // Break, Continue, Return
+
+    STMT_ABRUPT,
+    STMT_ABRUPT_BREAK,
+    STMT_ABRUPT_CONTINUE,
+    STMT_ABRUPT_RETURN,
+
     STMT_LIST,
     STMT_PRINT,
+    STMT_EXPR,
     STMT_BLOCK,
     STMT_ASSIGNMENT,
     STMT_FUNC,
@@ -111,6 +118,11 @@ typedef struct {
     AstStmt *else_;
 } AstStmtIf;
 
+typedef struct {
+    AstStmtType type;
+    AstExpr *expr; // @NULLABLE
+} AstStmtAbrupt;
+
 typedef struct ast_stmt_list_node AstStmtListNode;
 struct ast_stmt_list_node {
     AstStmt *this;
@@ -123,9 +135,9 @@ typedef struct {
 } AstStmtList;
 
 typedef struct {
-    AstStmtType type;
+    AstStmtType type; // Print or expression promoted to statement
     AstExpr *print_list;
-} AstStmtPrint;
+} AstStmtSingle;
 
 typedef struct {
     AstStmtType type;
@@ -139,6 +151,12 @@ typedef struct {
     AstStmtList *stmts;
 } AstStmtBlock;
 
+typedef struct {
+    AstStmtType type;
+    AstExpr *left; // Identifier literal or array indexing (BinaryExpr)
+    AstExpr *right;
+} AstStmtAssignment;
+
 
 #define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
@@ -148,9 +166,11 @@ typedef struct {
 
 #define AS_WHILE(___stmt) ((AstStmtWhile *)(___stmt))
 #define AS_IF(___stmt) ((AstStmtIf *)(___stmt))
-#define AS_PRINT(___stmt) ((AstStmtPrint *)(___stmt))
+#define AS_ABRUPT(___stmt) ((AstStmtAbrupt *)(___stmt))
+#define AS_SINGLE(___stmt) ((AstStmtSingle *)(___stmt))
 #define AS_DECLARATION(___stmt) ((AstStmtDeclaration *)(___stmt))
 #define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
+#define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
 
 extern char *expr_type_str_map[EXPR_TYPE_LEN];
 extern char *stmt_type_str_map[STMT_TYPE_LEN];
@@ -168,8 +188,10 @@ AstStmtListNode *make_stmt_list_node(Arena *arena, AstStmt *this);
 AstStmtList *make_stmt_list(Arena *arena, AstStmt *head);
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
-AstStmtPrint *make_print(Arena *arena, AstExpr *print_list);
+AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstExpr *print_list);
+AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr);
 AstStmtBlock *make_block(Arena *arena, AstStmtList *declarations, AstStmtList *statements);
+AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 
 void ast_print(AstStmt *head, Str8 *str_list, u32 indent);

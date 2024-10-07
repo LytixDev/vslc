@@ -59,6 +59,7 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
 
 char *PARSE_ERROR_MSGS[PET_LEN] = {
     "Expected ')' to terminate the group expression", /* PET_EXPECTED_RPAREN */
+    "Expected ']' to terminate the array indexing", /* PET_EXPECTED_RBRACKET */
     "Expected 'do' keyword to start the while-loop", /* PET_EXPECTED_DO */
     "Expected 'then' keyword after if-statement condition", /* PET_EXPECTED_THEN */
     "", /* PET_CUSTOME */
@@ -80,6 +81,8 @@ static inline Token next_token(Parser *parser)
 
 static inline Token peek_token(Parser *parser)
 {
+    // TODO: if we need more lookahead, this must change
+    // assert(!parser->lexer.has_next);
     Token token = lex_peek(&parser->arena, &parser->lexer);
 #ifdef DEBUG
     printf("Peek: %s\n", token_type_str_map[token.type]);
@@ -152,6 +155,7 @@ static bool is_relation_op(Token token)
 
 static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
 {
+    // TODO: if we need more lookahead, this must change
     Token token = peek_token(parser);
     if (token.type != expected) {
         next_token(parser);
@@ -162,18 +166,24 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
     return token;
 }
 
+static AstExprCall *parse_call(Parser *parser, Token identifier)
+{
+    /* Came from TOKEN_IDENTIFIER and then peeked TOKEN_LPAREN */
+    next_token(parser);
+    AstExpr *expr_list = NULL;
+    if (peek_token(parser).type == TOKEN_RPAREN) {
+        next_token(parser);
+    } else {
+        expr_list = parse_expr_list(parser, true);
+    }
+    return make_call(&parser->arena, identifier.str_list_idx, expr_list);
+}
+
 static AstExpr *parse_primary(Parser *parser)
 {
     Token token = next_token(parser);
     switch (token.type) {
     case TOKEN_LPAREN: {
-        AstExpr *expr = parse_expr(parser, 0);
-        Token err = consume_or_err(parser, TOKEN_RPAREN, PET_EXPECTED_RPAREN);
-        if (err.type == TOKEN_ERR) {
-            // TODO: gracefully continue
-            fprintf(stderr, "err");
-        }
-        return expr;
     }
     case TOKEN_MINUS: {
         /* Unary minus */
@@ -184,20 +194,13 @@ static AstExpr *parse_primary(Parser *parser)
     case TOKEN_IDENTIFIER: {
         Token next = peek_token(parser);
         if (next.type == TOKEN_LPAREN) {
-            /* Parse function call */
-            next_token(parser);
-            AstExpr *expr_list = NULL;
-            if (peek_token(parser).type == TOKEN_RPAREN) {
-                next_token(parser);
-            } else {
-                expr_list = parse_expr_list(parser, true);
-            }
-            return (AstExpr *)make_call(&parser->arena, token.str_list_idx, expr_list);
+            return (AstExpr *)parse_call(parser, token);
         } else if (next.type == TOKEN_LBRACKET) {
             /* Parse array indexing as a binary op */
             next_token(parser);
             AstExpr *left = (AstExpr *)make_literal(&parser->arena, token);
             AstExpr *right = parse_expr(parser, 0);
+            consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
             return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
         } else {
             /* Parse single identifier */
@@ -287,13 +290,6 @@ static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
 
 
 /* Parsing of statements */
-static AstStmtPrint *parse_print(Parser *parser)
-{
-    /* Came from TOKEN_PRINT */
-    AstExpr *print_list = parse_expr_list(parser, true);
-    return make_print(&parser->arena, print_list);
-}
-
 static AstStmtWhile *parse_while(Parser *parser)
 {
     /* Came from TOKEN_WHILE */
@@ -352,12 +348,50 @@ static AstStmt *parse_stmt(Parser *parser)
         return (AstStmt *)parse_while(parser);
     case TOKEN_IF:
         return (AstStmt *)parse_if(parser);
-    case TOKEN_PRINT:
-        return (AstStmt *)parse_print(parser);
+    case TOKEN_PRINT: {
+        AstExpr *print_list = parse_expr_list(parser, true);
+        return (AstStmt *)make_single(&parser->arena, STMT_PRINT, print_list);
+    }
+    case TOKEN_RETURN: {
+        AstExpr *expr = parse_expr(parser, 0);
+        return (AstStmt *)make_abrupt(&parser->arena, STMT_ABRUPT_RETURN, expr);
+    }
+    case TOKEN_IDENTIFIER: {
+        Token next = peek_token(parser);
+        if (next.type == TOKEN_LPAREN) {
+            /* Function call, promoted to a statement */
+            AstExpr *call = (AstExpr *)parse_call(parser, token);
+            return (AstStmt *)make_single(&parser->arena, STMT_EXPR, call);
+        }
+
+        next_token(parser);
+        AstExpr *left = (AstExpr *)make_literal(&parser->arena, token);
+
+        if (next.type == TOKEN_LBRACKET) {
+            /* Assignment, left-hand side is an array indexing */
+            AstExpr *right = parse_expr(parser, 0);
+            consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
+            left = (AstExpr *)make_binary(&parser->arena, left, next.type, right);
+            next = next_token(parser);
+        }
+
+        if (next.type != TOKEN_ASSIGNMENT) {
+            parse_error_append(parser, &next, PET_CUSTOME, "Expected assignment");
+            return NULL;
+        }
+
+        AstExpr *right = parse_expr(parser, 0);
+        return (AstStmt *)make_assignment(&parser->arena, left, right);
+    }
+
+    case TOKEN_BREAK:
+        return (AstStmt *)make_abrupt(&parser->arena, STMT_ABRUPT_BREAK, NULL);
+    case TOKEN_CONTINUE:
+        return (AstStmt *)make_abrupt(&parser->arena, STMT_ABRUPT_CONTINUE, NULL);
     case TOKEN_BEGIN:
         return (AstStmt *)parse_block(parser);
     default:
-        parse_error_append(parser, &token, PET_CUSTOME, "Unrecognized token ...");
+        parse_error_append(parser, &token, PET_CUSTOME, "Unrecognized first token in parse_stmt");
         return NULL;
     }
 }
