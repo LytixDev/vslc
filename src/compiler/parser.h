@@ -27,7 +27,7 @@ typedef enum {
     PET_EXPECTED_DO,
     PET_EXPECTED_THEN,
     PET_EXPCETED_CALL_END,
-    PET_CUSTOME,
+    PET_CUSTOM,
 
     PET_LEN,
 } ParseErrorType;
@@ -46,13 +46,14 @@ struct parse_error_t {
 typedef struct {
     u32 n_errors;
     ParseError *err_head;
-    AstStmt *head;
+    AstNode *head;
     Str8 *str_list; // Heap-alloced
     u32 str_list_len;
 } ParseResult;
 
 typedef struct {
     Arena arena; // Allocator for all dynamic allocations performed by the parser
+    Arena lex_arena;
     Lexer lexer;
     u32 n_errors;
     ParseError *err_head;

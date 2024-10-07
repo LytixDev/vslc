@@ -34,7 +34,7 @@ u32 parser(char *input)
         }
         fprintf(stderr, "[%i] %s\n", i + 1, msg);
     }
-    ast_print(res.head, res.str_list, 0);
+    ast_print(res.head, res.str_list);
     printf("\n");
 
     free(res.str_list);

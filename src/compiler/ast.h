@@ -20,6 +20,18 @@
 #include "base/types.h"
 #include "lex.h"
 
+/* Forwards */
+// typedef struct ast_decl_t AstDecl;
+
+/*
+ * Holds indices of identifiers into the str_list.
+ * iden_indice is stored in contiguous memory on an arena.
+ */
+typedef struct var_list_t {
+    u32 *iden_indices;
+    u32 len;
+} VarList;
+
 /* Expressions */
 typedef enum {
     EXPR_UNARY = 0,
@@ -147,7 +159,7 @@ typedef struct {
 
 typedef struct {
     AstStmtType type;
-    AstStmtList *declarations; // @NULLABLE
+    VarList declarations;
     AstStmtList *stmts;
 } AstStmtBlock;
 
@@ -156,6 +168,32 @@ typedef struct {
     AstExpr *left; // Identifier literal or array indexing (BinaryExpr)
     AstExpr *right;
 } AstStmtAssignment;
+
+/* Declarations and other AST Nodes */
+typedef enum {
+    AST_FUNC,
+    AST_GLOBAL_DECL,
+    AST_LOCAL_DECL,
+
+    AST_NODE_TYPE_LEN,
+} AstNodeType;
+
+typedef struct {
+    AstNodeType type;
+} AstNode;
+
+typedef struct {
+    AstNodeType type;
+    u32 identifier; // Index into str_list
+    VarList vars;
+    AstStmt *body;
+} AstFunction;
+
+// AstDecl, forwared at the start of the file
+// struct ast_decl_t {
+//    AstNodeType type; // Global or Local
+//    VarList identifiers;
+//};
 
 
 #define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
@@ -172,8 +210,11 @@ typedef struct {
 #define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
 #define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
 
+#define AS_FUNC(___node) ((AstFunction *)(___node))
+
 extern char *expr_type_str_map[EXPR_TYPE_LEN];
 extern char *stmt_type_str_map[STMT_TYPE_LEN];
+extern char *node_type_str_map[AST_NODE_TYPE_LEN];
 
 /* Expresions */
 AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
@@ -190,11 +231,16 @@ AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
 AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstExpr *print_list);
 AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr);
-AstStmtBlock *make_block(Arena *arena, AstStmtList *declarations, AstStmtList *statements);
+AstStmtBlock *make_block(Arena *arena, VarList declarations, AstStmtList *statements);
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
+/* */
+AstFunction *make_function(Arena *arena, u32 identifier, VarList vars, AstStmt *body);
+// AstDecl *make_decl(Arena *arena, AstNodeType decl_type, VarList identifiers);
 
-void ast_print(AstStmt *head, Str8 *str_list, u32 indent);
+
+void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent);
+void ast_print(AstNode *head, Str8 *str_list);
 
 
 #endif /* AST_H */

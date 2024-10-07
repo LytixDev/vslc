@@ -40,6 +40,12 @@ char *stmt_type_str_map[STMT_TYPE_LEN] = {
     "STMT_DECLARATION",
 };
 
+char *node_type_str_map[AST_NODE_TYPE_LEN] = {
+    "AST_FUNC",
+    "AST_GLOBAL_DECL",
+    "AST_LOCAL_DECL",
+};
+
 
 /* Expressions */
 AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op)
@@ -160,7 +166,7 @@ AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr)
 AstStmtDeclaration *make_declaration(Arena *arena);
 
 
-AstStmtBlock *make_block(Arena *arena, AstStmtList *declarations, AstStmtList *stmts)
+AstStmtBlock *make_block(Arena *arena, VarList declarations, AstStmtList *stmts)
 {
     AstStmtBlock *stmt = m_arena_alloc(arena, sizeof(AstStmtBlock));
     stmt->type = STMT_BLOCK;
@@ -177,6 +183,25 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
     stmt->right = right;
     return stmt;
 }
+
+/* Other nodes */
+AstFunction *make_function(Arena *arena, u32 identifier, VarList vars, AstStmt *body)
+{
+    AstFunction *func = m_arena_alloc(arena, sizeof(AstFunction));
+    func->type = AST_FUNC;
+    func->identifier = identifier;
+    func->vars = vars;
+    func->body = body;
+    return func;
+}
+
+// AstDecl *make_decl(Arena *arena, AstNodeType decl_type, VarList identifiers)
+// {
+//     AstDecl *decl = m_arena_alloc(arena, sizeof(AstDecl));
+//     decl->type = decl_type;
+//     decl->identifiers = identifiers;
+//     return decl;
+// }
 
 
 static void print_indent(u32 indent)
@@ -212,6 +237,8 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
         AstExprLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type == LIT_NUM) {
             printf("%d", lit->num_value);
+        } else if (lit->lit_type == LIT_IDENT) {
+            printf("%s", str_list[lit->str_list_idx].str);
         } else {
             printf("\"%s\"", str_list[lit->str_list_idx].str);
         }
@@ -234,7 +261,7 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
     }
 }
 
-void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
+void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
 {
     if (head == NULL) {
         return;
@@ -248,14 +275,14 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
     case STMT_WHILE: {
         AstStmtWhile *stmt = AS_WHILE(head);
         ast_print_expr(stmt->condition, str_list, indent + 1);
-        ast_print(stmt->body, str_list, indent + 1);
+        ast_print_stmt(stmt->body, str_list, indent + 1);
     }; break;
     case STMT_IF: {
         AstStmtIf *stmt = AS_IF(head);
         ast_print_expr(stmt->condition, str_list, indent + 1);
-        ast_print(stmt->then, str_list, indent + 1);
+        ast_print_stmt(stmt->then, str_list, indent + 1);
         if (stmt->else_ != NULL) {
-            ast_print(stmt->else_, str_list, indent + 1);
+            ast_print_stmt(stmt->else_, str_list, indent + 1);
         }
     }; break;
     case STMT_EXPR:
@@ -265,8 +292,12 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
     }; break;
     case STMT_BLOCK: {
         AstStmtBlock *stmt = AS_BLOCK(head);
+        printf(" vars=");
+        for (u32 i = 0; i < stmt->declarations.len; i++) {
+            printf("%s ", str_list[stmt->declarations.iden_indices[i]].str);
+        }
         for (AstStmtListNode *node = &stmt->stmts->head; node != NULL; node = node->next) {
-            ast_print(node->this, str_list, indent + 1);
+            ast_print_stmt(node->this, str_list, indent + 1);
         }
     }; break;
     case STMT_ABRUPT:
@@ -282,6 +313,25 @@ void ast_print(AstStmt *head, Str8 *str_list, u32 indent)
         AstStmtAssignment *stmt = AS_ASSIGNMENT(head);
         ast_print_expr(stmt->left, str_list, indent + 1);
         ast_print_expr(stmt->right, str_list, indent + 1);
+    }; break;
+    default:
+        printf("NOT HANDLED");
+    }
+}
+
+void ast_print(AstNode *head, Str8 *str_list)
+{
+    printf("%s ", node_type_str_map[head->type]);
+    switch (head->type) {
+    case AST_FUNC: {
+        AstFunction *func = AS_FUNC(head);
+        printf("name=%s", str_list[func->identifier].str);
+        /* Print the VarList */
+        printf(" vars=");
+        for (u32 i = 0; i < func->vars.len; i++) {
+            printf("%s ", str_list[func->vars.iden_indices[i]].str);
+        }
+        ast_print_stmt(func->body, str_list, 1);
     }; break;
     default:
         printf("NOT HANDLED");

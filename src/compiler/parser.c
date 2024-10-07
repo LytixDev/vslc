@@ -66,31 +66,42 @@ char *PARSE_ERROR_MSGS[PET_LEN] = {
     "", /* PET_CUSTOME */
 };
 
+/* Forwards */
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
 static AstExpr *parse_expr_list(Parser *parser, bool allow_str);
 static AstStmt *parse_stmt(Parser *parser);
+static VarList parse_local_decl_list(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
-static inline Token next_token(Parser *parser)
+static Token next_token(Parser *parser)
 {
-    Token token = lex_next(&parser->arena, &parser->lexer);
+    Token token = lex_next(&parser->lex_arena, &parser->lexer);
 #ifdef DEBUG
     printf("Consumed: %s\n", token_type_str_map[token.type]);
 #endif
     return token;
 }
 
-static inline Token peek_token(Parser *parser)
+static Token peek_token(Parser *parser)
 {
     // TODO: if we need more lookahead, this must change
     // assert(!parser->lexer.has_next);
-    Token token = lex_peek(&parser->arena, &parser->lexer);
-//#ifdef DEBUG
-//    printf("Peek: %s\n", token_type_str_map[token.type]);
-//#endif
+    Token token = lex_peek(&parser->lex_arena, &parser->lexer);
+    // #ifdef DEBUG
+    //     printf("Peek: %s\n", token_type_str_map[token.type]);
+    // #endif
     return token;
 }
 
+// TODO: use this in more places
+static bool match_token(Parser *parser, TokenType type)
+{
+    if (peek_token(parser).type == type) {
+        next_token(parser);
+        return true;
+    }
+    return false;
+}
 
 static ParseError *make_parse_error(Arena *arena, Token *failed, ParseErrorType pet, char *msg)
 {
@@ -250,7 +261,7 @@ static AstExprBinary *parse_relation(Parser *parser)
     AstExpr *left = parse_expr(parser, 0);
     Token op = peek_token(parser);
     if (!is_relation_op(op)) {
-        make_parse_error(&parser->arena, &op, PET_CUSTOME, "Expected a relation operator.");
+        make_parse_error(&parser->arena, &op, PET_CUSTOM, "Expected a relation operator.");
     } else {
         next_token(parser);
     }
@@ -319,13 +330,18 @@ static AstStmtIf *parse_if(Parser *parser)
 static AstStmtBlock *parse_block(Parser *parser)
 {
     /* Came from TOKEN_BLOCK */
+    VarList declarations = { 0 };
+    if (match_token(parser, TOKEN_VAR)) {
+        declarations = parse_local_decl_list(parser);
+    }
+
     AstStmt *first = parse_stmt(parser);
     AstStmtList *stmts = make_stmt_list(&parser->arena, first);
 
     Token next;
     while ((next = peek_token(parser)).type != TOKEN_END) {
         if (next.type == TOKEN_EOF) {
-            parse_error_append(parser, &next, PET_CUSTOME,
+            parse_error_append(parser, &next, PET_CUSTOM,
                                "Unexpected EOF inside a block. Expected END");
             break;
         }
@@ -339,7 +355,7 @@ static AstStmtBlock *parse_block(Parser *parser)
     if (next.type != TOKEN_EOF) {
         next_token(parser);
     }
-    return make_block(&parser->arena, NULL, stmts);
+    return make_block(&parser->arena, declarations, stmts);
 }
 
 static AstStmt *parse_stmt(Parser *parser)
@@ -378,7 +394,7 @@ static AstStmt *parse_stmt(Parser *parser)
         }
 
         if (next.type != TOKEN_ASSIGNMENT) {
-            parse_error_append(parser, &next, PET_CUSTOME, "Expected assignment");
+            parse_error_append(parser, &next, PET_CUSTOM, "Expected assignment");
             return NULL;
         }
 
@@ -393,9 +409,67 @@ static AstStmt *parse_stmt(Parser *parser)
     case TOKEN_BEGIN:
         return (AstStmt *)parse_block(parser);
     default:
-        parse_error_append(parser, &token, PET_CUSTOME, "Unrecognized first token in parse_stmt");
+        parse_error_append(parser, &token, PET_CUSTOM, "Unrecognized first token in parse_stmt");
         return NULL;
     }
+}
+
+static VarList parse_variable_list(Parser *parser)
+{
+    VarList vars = { .iden_indices = (u32 *)m_arena_alloc_internal(&parser->arena, 4, 4, false),
+                     .len = 0 };
+
+    u32 *iden_indices_head = vars.iden_indices;
+    u32 *new_head = NULL;
+    do {
+        /*
+         * If not first iteration of loop then we need to consume the comma we already peeked and
+         * allocate space for the next identifier.
+         */
+        if (vars.iden_indices != iden_indices_head) {
+            next_token(parser);
+            new_head = (u32 *)m_arena_alloc_internal(&parser->arena, 4, 4, false);
+        }
+        Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+        /* Alloc space for next identifier, store current, update len and head */
+        *iden_indices_head = identifier.str_list_idx;
+        iden_indices_head = new_head;
+        vars.len++;
+    } while (peek_token(parser).type == TOKEN_COMMA);
+
+    return vars;
+}
+
+static VarList parse_local_decl_list(Parser *parser)
+{
+    /* Came from TOKEN_VAR */
+    VarList identifiers = parse_variable_list(parser);
+    while (match_token(parser, TOKEN_VAR)) {
+        VarList next_identifiers = parse_variable_list(parser);
+        /*
+         * Since parse_variable_list ensures the identifiers are stored contigiously, and we do no
+         * other allocations on the parser arena, consequetive retain this contigious property.
+         */
+        identifiers.len += next_identifiers.len;
+    }
+    return identifiers;
+}
+
+static AstFunction *parse_func(Parser *parser)
+{
+    consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
+    Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+
+    consume_or_err(parser, TOKEN_LPAREN, PET_CUSTOM);
+    VarList vars = { 0 };
+    if (peek_token(parser).type != TOKEN_RPAREN) {
+        vars = parse_variable_list(parser);
+    }
+    consume_or_err(parser, TOKEN_RPAREN, PET_CUSTOM);
+
+    AstStmt *body = parse_stmt(parser);
+    AstFunction *func = make_function(&parser->arena, identifier.str_list_idx, vars, body);
+    return func;
 }
 
 ParseResult parse(char *input)
@@ -407,8 +481,9 @@ ParseResult parse(char *input)
     };
     lex_init(&parser.lexer, input);
     m_arena_init_dynamic(&parser.arena, 2, 512);
+    m_arena_init_dynamic(&parser.lex_arena, 1, 512);
 
-    AstStmt *head = parse_stmt(&parser);
+    AstNode *head = (AstNode *)parse_func(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,
