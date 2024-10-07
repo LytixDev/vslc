@@ -25,9 +25,19 @@ char *expr_type_str_map[EXPR_TYPE_LEN] = {
 };
 
 char *stmt_type_str_map[STMT_TYPE_LEN] = {
-    "STMT_WHILE",           "STMT_IF",           "STMT_ABRUPT", "STMT_ABRUPT_BREAK",
-    "STMT_ABRUPT_CONTINUE", "STMT_BREAK_RETURN", "STMT_LIST",   "STMT_PRINT", "STMT_EXPR",
-    "STMT_BLOCK",           "STMT_ASSIGNMENT",   "STMT_FUNC",   "STMT_DECLARATION",
+    "STMT_WHILE",
+    "STMT_IF",
+    "STMT_ABRUPT",
+    "STMT_ABRUPT_BREAK",
+    "STMT_ABRUPT_CONTINUE",
+    "STMT_BREAK_RETURN",
+    "STMT_LIST",
+    "STMT_PRINT",
+    "STMT_EXPR",
+    "STMT_BLOCK",
+    "STMT_ASSIGNMENT",
+    "STMT_FUNC",
+    "STMT_DECLARATION",
 };
 
 
