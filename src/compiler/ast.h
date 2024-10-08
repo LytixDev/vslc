@@ -20,24 +20,77 @@
 #include "base/types.h"
 #include "lex.h"
 
-/* Expressions */
+/*
+ * Holds indices of identifiers into the str_list.
+ * iden_indice is stored in contiguous memory on an arena.
+ */
+typedef struct var_list_t {
+    u32 *iden_indices;
+    u32 len;
+} VarList;
+
+/* Enums */
+typedef enum {
+    LIT_STR,
+    LIT_IDENT,
+    LIT_NUM,
+} LiteralType;
+
 typedef enum {
     EXPR_UNARY = 0,
     EXPR_BINARY,
     EXPR_LITERAL,
-    EXPR_LIST,
     EXPR_CALL,
     EXPR_TYPE_LEN,
 } AstExprType;
 
 typedef enum {
-    LIT_STR,
-    LIT_NUM,
-} LiteralType;
+    STMT_WHILE = EXPR_TYPE_LEN + 1,
+    STMT_IF,
 
+    STMT_ABRUPT,
+    STMT_ABRUPT_BREAK,
+    STMT_ABRUPT_CONTINUE,
+    STMT_ABRUPT_RETURN,
+
+    STMT_PRINT,
+    STMT_EXPR,
+    STMT_BLOCK,
+    STMT_ASSIGNMENT,
+    STMT_FUNC,
+    STMT_DECLARATION,
+    STMT_TYPE_LEN,
+} AstStmtType;
+
+typedef enum {
+    /*
+     * The way we set up the enum values means we always have space here for the EXPR and STMT vals.
+     */
+    AST_FUNC = STMT_TYPE_LEN + 1,
+    AST_LIST,
+    AST_GLOBAL_DECL,
+    AST_LOCAL_DECL,
+    AST_ROOT,
+
+    AST_NODE_TYPE_LEN,
+} AstNodeType;
+
+
+/* Headers */
 typedef struct expr_t {
     AstExprType type;
 } AstExpr;
+
+typedef struct stmt_t {
+    AstStmtType type;
+} AstStmt;
+
+typedef struct {
+    AstNodeType type;
+} AstNode;
+
+
+/* Expressions */
 
 typedef struct {
     AstExprType type;
@@ -61,42 +114,14 @@ typedef struct {
     };
 } AstExprLiteral;
 
-// TODO: Consider other structure than a linked-list
-typedef struct ast_expr_list_node AstExprListNode;
-struct ast_expr_list_node {
-    /* The AstExprListNode's will never be used as regular Expr's, so we don't need a type here */
-    AstExpr *this;
-    AstExprListNode *next;
-};
-typedef struct {
-    AstExprType type;
-    AstExprListNode head;
-    AstExprListNode *tail;
-} AstExprList;
-
 typedef struct {
     AstExprType type;
     u32 identifier; // Index into str_list
-    AstExpr *args; // @NULLABLE. type should either be Literal or List
+    AstNode *args; // @NULLABLE. type should either be Literal or List
 } AstExprCall;
 
-/* Statements */
-typedef enum {
-    STMT_WHILE = 0,
-    STMT_IF,
-    STMT_ABRUPT, // Break, Continue, Return
-    STMT_LIST,
-    STMT_PRINT,
-    STMT_BLOCK,
-    STMT_ASSIGNMENT,
-    STMT_FUNC,
-    STMT_DECLARATION,
-    STMT_TYPE_LEN,
-} AstStmtType;
 
-typedef struct stmt_t {
-    AstStmtType type;
-} AstStmt;
+/* Statements */
 
 typedef struct {
     AstStmtType type;
@@ -111,21 +136,27 @@ typedef struct {
     AstStmt *else_;
 } AstStmtIf;
 
-typedef struct ast_stmt_list_node AstStmtListNode;
-struct ast_stmt_list_node {
-    AstStmt *this;
-    AstStmtListNode *next;
+typedef struct {
+    AstStmtType type;
+    AstExpr *expr; // @NULLABLE
+} AstStmtAbrupt;
+
+// TODO: Consider other structure than a linked-list
+typedef struct ast_list_node AstListNode;
+struct ast_list_node {
+    AstNode *this;
+    AstListNode *next;
 };
 typedef struct {
-    AstStmtType type;
-    AstStmtListNode head;
-    AstStmtListNode *tail;
-} AstStmtList;
+    AstNodeType type;
+    AstListNode head;
+    AstListNode *tail;
+} AstList;
 
 typedef struct {
-    AstStmtType type;
-    AstExpr *print_list;
-} AstStmtPrint;
+    AstStmtType type; // Print or expression promoted to statement
+    AstNode *print_list;
+} AstStmtSingle;
 
 typedef struct {
     AstStmtType type;
@@ -135,44 +166,75 @@ typedef struct {
 
 typedef struct {
     AstStmtType type;
-    AstStmtList *declarations; // @NULLABLE
-    AstStmtList *stmts;
+    VarList declarations;
+    AstList *stmts;
 } AstStmtBlock;
+
+typedef struct {
+    AstStmtType type;
+    AstExpr *left; // Identifier literal or array indexing (BinaryExpr)
+    AstExpr *right;
+} AstStmtAssignment;
+
+
+/* Nodes */
+
+typedef struct {
+    AstNodeType type;
+    u32 identifier; // Index into str_list
+    VarList vars;
+    AstStmt *body;
+} AstFunction;
+
+typedef struct {
+    AstNodeType type;
+    AstList *declarations; // @NULLABLE
+    AstList *functions; // @NULLABLE
+} AstRoot;
 
 
 #define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
-#define AS_LIST(___expr) ((AstExprList *)(___expr))
 #define AS_CALL(___expr) ((AstExprCall *)(___expr))
 
 #define AS_WHILE(___stmt) ((AstStmtWhile *)(___stmt))
 #define AS_IF(___stmt) ((AstStmtIf *)(___stmt))
-#define AS_PRINT(___stmt) ((AstStmtPrint *)(___stmt))
+#define AS_ABRUPT(___stmt) ((AstStmtAbrupt *)(___stmt))
+#define AS_SINGLE(___stmt) ((AstStmtSingle *)(___stmt))
 #define AS_DECLARATION(___stmt) ((AstStmtDeclaration *)(___stmt))
 #define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
+#define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
 
-extern char *expr_type_str_map[EXPR_TYPE_LEN];
-extern char *stmt_type_str_map[STMT_TYPE_LEN];
+#define AS_FUNC(___node) ((AstFunction *)(___node))
+#define AS_LIST(___node) ((AstList *)(___node))
+#define AS_ROOT(___node) ((AstRoot *)(___node))
+
+extern char *node_type_str_map[AST_NODE_TYPE_LEN];
 
 /* Expresions */
 AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
 AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right);
 AstExprLiteral *make_literal(Arena *arena, Token token);
-AstExprListNode *make_list_node(Arena *arena, AstExpr *this);
-AstExprList *make_list(Arena *arena, AstExpr *head);
-AstExprCall *make_call(Arena *arena, u32 identifier, AstExpr *args);
+AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args);
 
 /* Statements */
-AstStmtListNode *make_stmt_list_node(Arena *arena, AstStmt *this);
-AstStmtList *make_stmt_list(Arena *arena, AstStmt *head);
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
-AstStmtPrint *make_print(Arena *arena, AstExpr *print_list);
-AstStmtBlock *make_block(Arena *arena, AstStmtList *declarations, AstStmtList *statements);
+AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
+AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr);
+AstStmtBlock *make_block(Arena *arena, VarList declarations, AstList *statements);
+AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
+
+/* */
+AstFunction *make_function(Arena *arena, u32 identifier, VarList vars, AstStmt *body);
+AstListNode *make_list_node(Arena *arena, AstNode *this);
+void ast_list_push_back(AstList *list, AstListNode *node);
+AstList *make_list(Arena *arena, AstNode *head);
+AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions);
 
 
-void ast_print(AstStmt *head, Str8 *str_list, u32 indent);
+void ast_print(AstNode *head, Str8 *str_list, u32 indent);
 
 
 #endif /* AST_H */

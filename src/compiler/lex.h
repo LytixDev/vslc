@@ -33,7 +33,7 @@ typedef enum {
     TOKEN_STR,
 
     // Assignment
-    TOKEN_ASSIGNMENT,
+    TOKEN_ASSIGNMENT, // :=
 
     // Basic arithmetic
     TOKEN_PLUS,
@@ -67,6 +67,7 @@ typedef enum {
     TOKEN_RETURN,
     TOKEN_PRINT,
     TOKEN_BREAK,
+    TOKEN_CONTINUE,
     TOKEN_IF,
     TOKEN_THEN,
     TOKEN_ELSE,

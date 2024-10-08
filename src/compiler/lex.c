@@ -25,7 +25,8 @@
 
 
 char *reserved_words[] = {
-    "func", "begin", "end", "return", "print", "break", "if", "then", "else", "while", "do", "var",
+    "func", "begin", "end",  "return", "print", "break", "continue",
+    "if",   "then",  "else", "while",  "do",    "var",
 };
 
 
@@ -67,12 +68,11 @@ static void lex_error_append(Arena *arena, Lexer *lexer, char *msg)
     reset_token_ctx(lexer);
 }
 
-
 static u32 str_list_push(Lexer *lexer, Str8 str)
 {
     if (lexer->str_list_len == lexer->str_list_cap) {
         lexer->str_list_cap *= 2;
-        lexer->str_list = realloc(lexer->str_list, lexer->str_list_cap);
+        lexer->str_list = realloc(lexer->str_list, sizeof(Str8) * lexer->str_list_cap);
     }
     lexer->str_list[lexer->str_list_len] = str;
     lexer->str_list_len++;
@@ -200,6 +200,9 @@ void lex_init(Lexer *lexer, char *input)
 
 Token lex_peek(Arena *arena, Lexer *lexer)
 {
+    if (lexer->has_next) {
+        return lexer->next;
+    }
     Token next = lex_next(arena, lexer);
     lexer->has_next = true;
     lexer->next = next;
@@ -393,8 +396,8 @@ char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
     "ERR",    "NUM",    "STR",      "ASSIGNMENT", "PLUS",  "MINUS", "STAR",
     "SLASH",  "LSHIFT", "RSHIFT",   "EQ",         "NEQ",   "LESS",  "GREATER",
     "LPAREN", "RPAREN", "LBRACKET", "RBRACKET",   "COMMA", "EOF",   "IDENTIFIER",
-    "FUNC",   "BEGIN",  "END",      "RETURN",     "PRINT", "BREAK", "IF",
-    "THEN",   "ELSE",   "WHILE",    "DO",         "VAR",
+    "FUNC",   "BEGIN",  "END",      "RETURN",     "PRINT", "BREAK", "CONTINUE",
+    "IF",     "THEN",   "ELSE",     "WHILE",      "DO",    "VAR",
 };
 
 

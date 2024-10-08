@@ -104,6 +104,9 @@ void m_arena_tmp_release(struct m_arena_tmp tmp);
     for (size_t ___i = 0, ___offset = (___arena)->offset; ___i == 0; \
          ___i += 1, (___arena)->offset = ___offset)
 
+
+#define arena_curr_ptr(arena) (uintptr_t)(arena)->memory + (uintptr_t)(arena)->offset
+
 #endif /* !SAC_H */
 #ifdef SAC_IMPLEMENTATION
 /* IMPORT START */

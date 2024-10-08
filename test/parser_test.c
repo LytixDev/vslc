@@ -17,6 +17,7 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "base/sac_single.h"
 #include "compiler/ast.h"
@@ -78,6 +79,10 @@ static bool ast_cmp(AstExpr *a, AstExpr *b)
             return A->args == NULL && B->args == NULL;
         }
         return ast_cmp(A->args, B->args);
+    };
+    default: {
+        printf("AST CMP UNKNOWN TYPE\n");
+        return false;
     };
     }
 
