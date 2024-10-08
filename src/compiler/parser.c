@@ -457,6 +457,7 @@ static VarList parse_local_decl_list(Parser *parser)
 
 static AstFunction *parse_func(Parser *parser)
 {
+    // /* Came from TOKEN_FUNC */
     consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
 
@@ -471,6 +472,36 @@ static AstFunction *parse_func(Parser *parser)
     AstFunction *func = make_function(&parser->arena, identifier.str_list_idx, vars, body);
     return func;
 }
+
+// static void parse_global_decl_list(Parser *parser);
+//
+// static void parse_global_list(Parser *parser)
+// {
+//     /*
+//      * while true
+//      *  function (FUNC) or global_decl (VAR)
+//      */
+//
+//     AstStmtList *stmts = make_stmt_list(&parser->arena, NULL);
+//
+//     Token next;
+//     while ((next = next_token(parser)).type != TOKEN_END) {
+//         switch (next.type) {
+//         case TOKEN_FUNC: {
+//             AstFunction *func = parse_func(parser);
+//             AstStmtListNode *func_node = make_stmt_list_node(&parser->arena, func);
+//
+//         }; break;
+//         default: {
+//
+//         };
+//         }
+//         // AstStmtListNode *list_node = make_stmt_list_node(&parser->arena, stmt);
+//         // stmts->tail->next = list_node;
+//         // stmts->tail = list_node;
+//     }
+// }
+
 
 ParseResult parse(char *input)
 {

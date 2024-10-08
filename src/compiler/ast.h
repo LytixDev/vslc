@@ -189,6 +189,25 @@ typedef struct {
     AstStmt *body;
 } AstFunction;
 
+
+// typedef struct ast_list_node AstListNode;
+// struct ast_list_node {
+//     AstNode *this;
+//     AstListNode *next;
+// };
+// typedef struct {
+//     AstNodeType type;
+//     AstListNode head;
+//     AstListNode *tail;
+// } AstList;
+
+typedef struct {
+    AstNodeType type;
+    VarList globals;
+    AstStmtList *arrays; // Wrapped inside AstStmtSingle :-(
+    AstStmtList *functions;
+} AstRoot;
+
 // AstDecl, forwared at the start of the file
 // struct ast_decl_t {
 //    AstNodeType type; // Global or Local
