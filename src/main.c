@@ -34,8 +34,11 @@ u32 parser(char *input)
         }
         fprintf(stderr, "[%i] %s\n", i + 1, msg);
     }
-    ast_print(res.head, res.str_list, 0);
-    printf("\n");
+
+    if (res.n_errors == 0) {
+        ast_print((AstNode *)res.head, res.str_list, 0);
+        printf("\n");
+    }
 
     free(res.str_list);
 

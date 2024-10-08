@@ -68,12 +68,11 @@ static void lex_error_append(Arena *arena, Lexer *lexer, char *msg)
     reset_token_ctx(lexer);
 }
 
-
 static u32 str_list_push(Lexer *lexer, Str8 str)
 {
     if (lexer->str_list_len == lexer->str_list_cap) {
         lexer->str_list_cap *= 2;
-        lexer->str_list = realloc(lexer->str_list, lexer->str_list_cap);
+        lexer->str_list = realloc(lexer->str_list, sizeof(Str8) * lexer->str_list_cap);
     }
     lexer->str_list[lexer->str_list_len] = str;
     lexer->str_list_len++;
@@ -201,6 +200,9 @@ void lex_init(Lexer *lexer, char *input)
 
 Token lex_peek(Arena *arena, Lexer *lexer)
 {
+    if (lexer->has_next) {
+        return lexer->next;
+    }
     Token next = lex_next(arena, lexer);
     lexer->has_next = true;
     lexer->next = next;

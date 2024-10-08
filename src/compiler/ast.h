@@ -70,6 +70,7 @@ typedef enum {
     AST_LIST,
     AST_GLOBAL_DECL,
     AST_LOCAL_DECL,
+    AST_ROOT,
 
     AST_NODE_TYPE_LEN,
 } AstNodeType;
@@ -187,9 +188,8 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
-    VarList globals;
-    AstList *arrays; // Wrapped inside AstStmtSingle :-(
-    AstList *functions;
+    AstList *declarations; // @NULLABLE
+    AstList *functions; // @NULLABLE
 } AstRoot;
 
 
@@ -208,6 +208,7 @@ typedef struct {
 
 #define AS_FUNC(___node) ((AstFunction *)(___node))
 #define AS_LIST(___node) ((AstList *)(___node))
+#define AS_ROOT(___node) ((AstRoot *)(___node))
 
 extern char *node_type_str_map[AST_NODE_TYPE_LEN];
 
@@ -218,8 +219,6 @@ AstExprLiteral *make_literal(Arena *arena, Token token);
 AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args);
 
 /* Statements */
-AstListNode *make_list_node(Arena *arena, AstNode *this);
-AstList *make_list(Arena *arena, AstNode *head);
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
 AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
@@ -229,7 +228,10 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
 AstFunction *make_function(Arena *arena, u32 identifier, VarList vars, AstStmt *body);
-// AstDecl *make_decl(Arena *arena, AstNodeType decl_type, VarList identifiers);
+AstListNode *make_list_node(Arena *arena, AstNode *this);
+void ast_list_push_back(AstList *list, AstListNode *node);
+AstList *make_list(Arena *arena, AstNode *head);
+AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions);
 
 
 void ast_print(AstNode *head, Str8 *str_list, u32 indent);

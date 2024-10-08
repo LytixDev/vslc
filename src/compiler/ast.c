@@ -46,6 +46,7 @@ char *node_type_str_map[AST_NODE_TYPE_LEN] = {
     "AST_LIST",
     "AST_GLOBAL_DECL",
     "AST_LOCAL_DECL",
+    "AST_ROOT",
 };
 
 /* Expressions */
@@ -92,24 +93,6 @@ AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args)
 }
 
 /* Statements */
-AstListNode *make_list_node(Arena *arena, AstNode *this)
-{
-    AstListNode *node = m_arena_alloc(arena, sizeof(AstListNode));
-    node->this = this;
-    node->next = NULL;
-    return node;
-}
-
-AstList *make_list(Arena *arena, AstNode *head)
-{
-    AstList *list = m_arena_alloc(arena, sizeof(AstList));
-    list->type = AST_LIST;
-    AstListNode head_node = { .this = head, .next = NULL };
-    list->head = head_node;
-    list->tail = &list->head;
-    return list;
-}
-
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body)
 {
     AstStmtWhile *stmt = m_arena_alloc(arena, sizeof(AstStmtWhile));
@@ -177,13 +160,38 @@ AstFunction *make_function(Arena *arena, u32 identifier, VarList vars, AstStmt *
     return func;
 }
 
-// AstDecl *make_decl(Arena *arena, AstNodeType decl_type, VarList identifiers)
-// {
-//     AstDecl *decl = m_arena_alloc(arena, sizeof(AstDecl));
-//     decl->type = decl_type;
-//     decl->identifiers = identifiers;
-//     return decl;
-// }
+AstListNode *make_list_node(Arena *arena, AstNode *this)
+{
+    AstListNode *node = m_arena_alloc(arena, sizeof(AstListNode));
+    node->this = this;
+    node->next = NULL;
+    return node;
+}
+
+AstList *make_list(Arena *arena, AstNode *head)
+{
+    AstList *list = m_arena_alloc(arena, sizeof(AstList));
+    list->type = AST_LIST;
+    AstListNode head_node = { .this = head, .next = NULL };
+    list->head = head_node;
+    list->tail = &list->head;
+    return list;
+}
+
+void ast_list_push_back(AstList *list, AstListNode *node)
+{
+    list->tail->next = node;
+    list->tail = node;
+}
+
+AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions)
+{
+    AstRoot *root = m_arena_alloc(arena, sizeof(AstRoot));
+    root->type = AST_ROOT;
+    root->declarations = declarations;
+    root->functions = functions;
+    return root;
+}
 
 
 static void print_indent(u32 indent)
@@ -208,7 +216,7 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
     } break;
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
-        char *op_text_repr = node_type_str_map[binary->op];
+        char *op_text_repr = token_type_str_map[binary->op];
         putchar('\n');
         print_indent(indent + 1);
         printf("op: %s", op_text_repr);
@@ -270,9 +278,6 @@ void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
             printf("%s ", str_list[stmt->declarations.iden_indices[i]].str);
         }
         ast_print((AstNode *)stmt->stmts, str_list, indent + 1);
-        // for (AstListNode *node = &stmt->stmts->head; node != NULL; node = node->next) {
-        //     ast_print_stmt(node->this, str_list, indent + 1);
-        // }
     }; break;
     case STMT_ABRUPT:
     case STMT_ABRUPT_BREAK:
@@ -309,6 +314,15 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
     print_indent(indent);
     printf("%s ", node_type_str_map[head->type]);
     switch (head->type) {
+    case AST_ROOT: {
+        AstRoot *root = AS_ROOT(head);
+        if (root->declarations != NULL) {
+            ast_print((AstNode *)root->declarations, str_list, indent + 1);
+        }
+        if (root->functions != NULL) {
+            ast_print((AstNode *)root->functions, str_list, indent + 1);
+        }
+    }; break;
     case AST_FUNC: {
         AstFunction *func = AS_FUNC(head);
         printf("name=%s", str_list[func->identifier].str);

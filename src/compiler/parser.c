@@ -294,8 +294,7 @@ static AstNode *parse_expr_list(Parser *parser, bool allow_str)
             expr = parse_expr(parser, 0);
         }
         list_node = make_list_node(&parser->arena, (AstNode *)expr);
-        list->tail->next = list_node;
-        list->tail = list_node;
+        ast_list_push_back(list, list_node);
     } while (peek_token(parser).type == TOKEN_COMMA);
 
     return (AstNode *)list;
@@ -347,8 +346,7 @@ static AstStmtBlock *parse_block(Parser *parser)
         }
         AstStmt *stmt = parse_stmt(parser);
         AstListNode *list_node = make_list_node(&parser->arena, (AstNode *)stmt);
-        stmts->tail->next = list_node;
-        stmts->tail = list_node;
+        ast_list_push_back(stmts, list_node);
     }
 
     /* Consume the END token */
@@ -420,20 +418,18 @@ static VarList parse_variable_list(Parser *parser)
                      .len = 0 };
 
     u32 *iden_indices_head = vars.iden_indices;
-    u32 *new_head = NULL;
     do {
         /*
          * If not first iteration of loop then we need to consume the comma we already peeked and
          * allocate space for the next identifier.
          */
-        if (vars.iden_indices != iden_indices_head) {
+        if (vars.len != 0) {
             next_token(parser);
-            new_head = (u32 *)m_arena_alloc_internal(&parser->arena, 4, 4, false);
+            iden_indices_head = (u32 *)m_arena_alloc_internal(&parser->arena, 4, 4, false);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
         /* Alloc space for next identifier, store current, update len and head */
         *iden_indices_head = identifier.str_list_idx;
-        iden_indices_head = new_head;
         vars.len++;
     } while (peek_token(parser).type == TOKEN_COMMA);
 
@@ -457,8 +453,8 @@ static VarList parse_local_decl_list(Parser *parser)
 
 static AstFunction *parse_func(Parser *parser)
 {
-    // /* Came from TOKEN_FUNC */
-    consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
+    /* Came from TOKEN_FUNC */
+    // consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
 
     consume_or_err(parser, TOKEN_LPAREN, PET_CUSTOM);
@@ -473,34 +469,66 @@ static AstFunction *parse_func(Parser *parser)
     return func;
 }
 
-// static void parse_global_decl_list(Parser *parser);
-//
-// static void parse_global_list(Parser *parser)
-// {
-//     /*
-//      * while true
-//      *  function (FUNC) or global_decl (VAR)
-//      */
-//
-//     AstStmtList *stmts = make_stmt_list(&parser->arena, NULL);
-//
-//     Token next;
-//     while ((next = next_token(parser)).type != TOKEN_END) {
-//         switch (next.type) {
-//         case TOKEN_FUNC: {
-//             AstFunction *func = parse_func(parser);
-//             AstStmtListNode *func_node = make_stmt_list_node(&parser->arena, func);
-//
-//         }; break;
-//         default: {
-//
-//         };
-//         }
-//         // AstStmtListNode *list_node = make_stmt_list_node(&parser->arena, stmt);
-//         // stmts->tail->next = list_node;
-//         // stmts->tail = list_node;
-//     }
-// }
+static AstRoot *parse_root(Parser *parser)
+{
+    AstList *functions = NULL;
+    AstList *declarations = NULL;
+
+    Token next;
+    while ((next = next_token(parser)).type != TOKEN_EOF) {
+        switch (next.type) {
+        case TOKEN_FUNC: {
+            AstFunction *func = parse_func(parser);
+            if (functions == NULL) {
+                functions = make_list(&parser->arena, (AstNode *)func);
+            } else {
+                AstListNode *func_node = make_list_node(&parser->arena, (AstNode *)func);
+                ast_list_push_back(functions, func_node);
+            }
+        }; break;
+        case TOKEN_VAR: {
+            /* Parse global declarations list */
+            AstNode *decl = NULL;
+            do {
+                Token ident = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+                next = peek_token(parser);
+                if (next.type == TOKEN_LBRACKET) {
+                    /* Parse array indexing as a binary op */
+                    next_token(parser);
+                    AstExpr *left = (AstExpr *)make_literal(&parser->arena, ident);
+                    AstExpr *right = parse_expr(parser, 0);
+                    consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
+                    next = peek_token(parser); // Advance
+                    decl = (AstNode *)make_binary(&parser->arena, left, TOKEN_LBRACKET, right);
+                } else {
+                    /* Parse single identifier */
+                    decl = (AstNode *)make_literal(&parser->arena, ident);
+                }
+
+                /* Add newly parsed decl to declarations */
+                if (declarations == NULL) {
+                    declarations = make_list(&parser->arena, decl);
+                } else {
+                    AstListNode *decl_node = make_list_node(&parser->arena, decl);
+                    ast_list_push_back(declarations, decl_node);
+                }
+
+                if (next.type != TOKEN_COMMA) {
+                    break;
+                }
+                next_token(parser); // Consume the comma before we continue
+            } while (1);
+
+        }; break;
+        default: {
+            printf("Not handled oops\n");
+            break;
+        };
+        }
+    }
+
+    return make_root(&parser->arena, declarations, functions);
+}
 
 
 ParseResult parse(char *input)
@@ -514,7 +542,8 @@ ParseResult parse(char *input)
     m_arena_init_dynamic(&parser.arena, 2, 512);
     m_arena_init_dynamic(&parser.lex_arena, 1, 512);
 
-    AstNode *head = (AstNode *)parse_func(&parser);
+    // AstNode *head = (AstNode *)parse_func(&parser);
+    AstRoot *head = parse_root(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,
