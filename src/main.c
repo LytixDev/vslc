@@ -41,7 +41,6 @@ u32 parser(char *input)
     }
 
     free(res.str_list);
-
     return res.n_errors;
 }
 

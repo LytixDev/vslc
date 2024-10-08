@@ -197,6 +197,13 @@ static AstExpr *parse_primary(Parser *parser)
     Token token = next_token(parser);
     switch (token.type) {
     case TOKEN_LPAREN: {
+        AstExpr *expr = parse_expr(parser, 0);
+        Token err = consume_or_err(parser, TOKEN_RPAREN, PET_EXPECTED_RPAREN);
+        if (err.type == TOKEN_ERR) {
+            // TODO: gracefully continue
+            fprintf(stderr, "err");
+        }
+        return expr;
     }
     case TOKEN_MINUS: {
         /* Unary minus */
