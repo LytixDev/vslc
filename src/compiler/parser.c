@@ -68,7 +68,7 @@ char *PARSE_ERROR_MSGS[PET_LEN] = {
 
 /* Forwards */
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
-static AstExpr *parse_expr_list(Parser *parser, bool allow_str);
+static AstNode *parse_expr_list(Parser *parser, bool allow_str);
 static AstStmt *parse_stmt(Parser *parser);
 static VarList parse_local_decl_list(Parser *parser);
 
@@ -182,7 +182,7 @@ static AstExprCall *parse_call(Parser *parser, Token identifier)
 {
     /* Came from TOKEN_IDENTIFIER and then peeked TOKEN_LPAREN */
     next_token(parser);
-    AstExpr *expr_list = NULL;
+    AstNode *expr_list = NULL;
     if (peek_token(parser).type == TOKEN_RPAREN) {
         next_token(parser);
     } else {
@@ -269,7 +269,7 @@ static AstExprBinary *parse_relation(Parser *parser)
     return make_binary(&parser->arena, left, op.type, right);
 }
 
-static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
+static AstNode *parse_expr_list(Parser *parser, bool allow_str)
 {
     /* allow_str is true means the list parsers strings and/or exprs */
     AstExpr *expr;
@@ -281,11 +281,11 @@ static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
     if (!(peek_token(parser).type == TOKEN_COMMA)) {
         // TODO: We could simplify certain parts of the compiler of the expr list always
         //       wrapped a single literal inside a list.
-        return expr;
+        return (AstNode *)expr;
     }
 
-    AstExprList *list = make_list(&parser->arena, expr);
-    AstExprListNode *list_node;
+    AstList *list = make_list(&parser->arena, (AstNode *)expr);
+    AstListNode *list_node;
     do {
         next_token(parser);
         if (allow_str && peek_token(parser).type == TOKEN_STR) {
@@ -293,12 +293,12 @@ static AstExpr *parse_expr_list(Parser *parser, bool allow_str)
         } else {
             expr = parse_expr(parser, 0);
         }
-        list_node = make_list_node(&parser->arena, expr);
+        list_node = make_list_node(&parser->arena, (AstNode *)expr);
         list->tail->next = list_node;
         list->tail = list_node;
     } while (peek_token(parser).type == TOKEN_COMMA);
 
-    return (AstExpr *)list;
+    return (AstNode *)list;
 }
 
 
@@ -336,7 +336,7 @@ static AstStmtBlock *parse_block(Parser *parser)
     }
 
     AstStmt *first = parse_stmt(parser);
-    AstStmtList *stmts = make_stmt_list(&parser->arena, first);
+    AstList *stmts = make_list(&parser->arena, (AstNode *)first);
 
     Token next;
     while ((next = peek_token(parser)).type != TOKEN_END) {
@@ -346,7 +346,7 @@ static AstStmtBlock *parse_block(Parser *parser)
             break;
         }
         AstStmt *stmt = parse_stmt(parser);
-        AstStmtListNode *list_node = make_stmt_list_node(&parser->arena, stmt);
+        AstListNode *list_node = make_list_node(&parser->arena, (AstNode *)stmt);
         stmts->tail->next = list_node;
         stmts->tail = list_node;
     }
@@ -367,7 +367,7 @@ static AstStmt *parse_stmt(Parser *parser)
     case TOKEN_IF:
         return (AstStmt *)parse_if(parser);
     case TOKEN_PRINT: {
-        AstExpr *print_list = parse_expr_list(parser, true);
+        AstNode *print_list = parse_expr_list(parser, true);
         return (AstStmt *)make_single(&parser->arena, STMT_PRINT, print_list);
     }
     case TOKEN_RETURN: {
@@ -378,7 +378,7 @@ static AstStmt *parse_stmt(Parser *parser)
         Token next = peek_token(parser);
         if (next.type == TOKEN_LPAREN) {
             /* Function call, promoted to a statement */
-            AstExpr *call = (AstExpr *)parse_call(parser, token);
+            AstNode *call = (AstNode *)parse_call(parser, token);
             return (AstStmt *)make_single(&parser->arena, STMT_EXPR, call);
         }
 
