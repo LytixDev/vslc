@@ -1,0 +1,61 @@
+--- GIVEN ---
+func main() begin
+    var x, y, z
+    x := y + z
+    y := 5 + z * 3
+    z := z * z - 3
+    x := (x + y) / z
+    x := y << 1
+    y := x >> 1
+end
+--- EXPECT ---
+AST_ROOT 
+ AST_LIST 
+  AST_FUNC name=main vars=
+   STMT_BLOCK vars=x y z 
+    AST_LIST 
+     STMT_ASSIGNMENT
+      EXPR_LITERAL x
+      EXPR_BINARY 
+       op: PLUS
+       EXPR_LITERAL y
+       EXPR_LITERAL z
+     STMT_ASSIGNMENT
+      EXPR_LITERAL y
+      EXPR_BINARY 
+       op: PLUS
+       EXPR_LITERAL 5
+       EXPR_BINARY 
+        op: STAR
+        EXPR_LITERAL z
+        EXPR_LITERAL 3
+     STMT_ASSIGNMENT
+      EXPR_LITERAL z
+      EXPR_BINARY 
+       op: MINUS
+       EXPR_BINARY 
+        op: STAR
+        EXPR_LITERAL z
+        EXPR_LITERAL z
+       EXPR_LITERAL 3
+     STMT_ASSIGNMENT
+      EXPR_LITERAL x
+      EXPR_BINARY 
+       op: SLASH
+       EXPR_BINARY 
+        op: PLUS
+        EXPR_LITERAL x
+        EXPR_LITERAL y
+       EXPR_LITERAL z
+     STMT_ASSIGNMENT
+      EXPR_LITERAL x
+      EXPR_BINARY 
+       op: LSHIFT
+       EXPR_LITERAL y
+       EXPR_LITERAL 1
+     STMT_ASSIGNMENT
+      EXPR_LITERAL y
+      EXPR_BINARY 
+       op: RSHIFT
+       EXPR_LITERAL x
+       EXPR_LITERAL 1

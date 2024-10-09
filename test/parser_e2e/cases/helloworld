@@ -1,0 +1,12 @@
+--- GIVEN ---
+func main() begin
+    print "Hello, World!"
+end
+--- EXPECT ---
+AST_ROOT 
+ AST_LIST 
+  AST_FUNC name=main vars=
+   STMT_BLOCK vars=
+    AST_LIST 
+     STMT_PRINT
+      EXPR_LITERAL "Hello, World!"

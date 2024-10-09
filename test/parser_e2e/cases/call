@@ -1,0 +1,28 @@
+--- GIVEN ---
+func add(a, b) begin
+    return a + b
+end
+
+func main() 
+begin
+    print add(40, 2)
+end
+--- EXPECT ---
+AST_ROOT 
+ AST_LIST 
+  AST_FUNC name=add vars=a b 
+   STMT_BLOCK vars=
+    AST_LIST 
+     STMT_BREAK_RETURN
+      EXPR_BINARY 
+       op: PLUS
+       EXPR_LITERAL a
+       EXPR_LITERAL b
+  AST_FUNC name=main vars=
+   STMT_BLOCK vars=
+    AST_LIST 
+     STMT_PRINT
+      EXPR_CALL add
+       AST_LIST 
+        EXPR_LITERAL 40
+        EXPR_LITERAL 2

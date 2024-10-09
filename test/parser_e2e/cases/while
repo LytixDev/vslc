@@ -1,0 +1,31 @@
+--- GIVEN ---
+func main()
+begin   
+    var i
+    i := 2
+    while i < 9000 do
+        i := i * i
+    print i
+end
+--- EXPECT ---
+AST_ROOT 
+ AST_LIST 
+  AST_FUNC name=main vars=
+   STMT_BLOCK vars=i 
+    AST_LIST 
+     STMT_ASSIGNMENT
+      EXPR_LITERAL i
+      EXPR_LITERAL 2
+     STMT_WHILE
+      EXPR_BINARY 
+       op: LESS
+       EXPR_LITERAL i
+       EXPR_LITERAL 9000
+      STMT_ASSIGNMENT
+       EXPR_LITERAL i
+       EXPR_BINARY 
+        op: STAR
+        EXPR_LITERAL i
+        EXPR_LITERAL i
+     STMT_PRINT
+      EXPR_LITERAL i
