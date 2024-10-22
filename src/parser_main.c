@@ -25,7 +25,12 @@
 
 u32 parser(char *input)
 {
-    ParseResult res = parse(input);
+    Arena arena;
+    Arena lex_arena;
+    m_arena_init_dynamic(&arena, 2, 512);
+    m_arena_init_dynamic(&lex_arena, 1, 512);
+
+    ParseResult res = parse(&arena, &lex_arena, input);
     ParseError *parse_error = res.err_head;
     for (u32 i = 0; i < res.n_errors; i++) {
         char *msg = parse_error->msg;
@@ -41,6 +46,8 @@ u32 parser(char *input)
     }
 
     free(res.str_list);
+    m_arena_release(&arena);
+    m_arena_release(&lex_arena);
     return res.n_errors;
 }
 

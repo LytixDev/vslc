@@ -45,7 +45,7 @@ typedef enum {
 } AstExprType;
 
 typedef enum {
-    STMT_WHILE = EXPR_TYPE_LEN + 1,
+    STMT_WHILE = EXPR_TYPE_LEN,
     STMT_IF,
 
     STMT_ABRUPT,
@@ -58,7 +58,6 @@ typedef enum {
     STMT_BLOCK,
     STMT_ASSIGNMENT,
     STMT_FUNC,
-    STMT_DECLARATION,
     STMT_TYPE_LEN,
 } AstStmtType;
 
@@ -66,17 +65,17 @@ typedef enum {
     /*
      * The way we set up the enum values means we always have space here for the EXPR and STMT vals.
      */
-    AST_FUNC = STMT_TYPE_LEN + 1,
+    AST_FUNC = STMT_TYPE_LEN,
     AST_LIST,
-    AST_GLOBAL_DECL,
-    AST_LOCAL_DECL,
     AST_ROOT,
 
     AST_NODE_TYPE_LEN,
 } AstNodeType;
 
-
-/* Headers */
+/* 
+ * Headers
+ * The way everything is set up means we can always upcast AstExpr's and AstStmt's to AstNode's.
+ */
 typedef struct expr_t {
     AstExprType type;
 } AstExpr;
@@ -91,7 +90,6 @@ typedef struct {
 
 
 /* Expressions */
-
 typedef struct {
     AstExprType type;
     TokenType op;
@@ -122,7 +120,6 @@ typedef struct {
 
 
 /* Statements */
-
 typedef struct {
     AstStmtType type;
     AstExpr *condition;
@@ -135,11 +132,6 @@ typedef struct {
     AstStmt *then;
     AstStmt *else_;
 } AstStmtIf;
-
-typedef struct {
-    AstStmtType type;
-    AstExpr *expr; // @NULLABLE
-} AstStmtAbrupt;
 
 // TODO: Consider other structure than a linked-list
 typedef struct ast_list_node AstListNode;
@@ -154,15 +146,9 @@ typedef struct {
 } AstList;
 
 typedef struct {
-    AstStmtType type; // Print or expression promoted to statement
-    AstNode *print_list;
+    AstStmtType type; // Abrupt, print or Expr promoted to an Stmt
+    AstNode *node; // @NULLABLE
 } AstStmtSingle;
-
-typedef struct {
-    AstStmtType type;
-    u32 *identifier_str_idxs; // Array of indexes into the str list
-    u32 len; // How many identifiers
-} AstStmtDeclaration;
 
 typedef struct {
     AstStmtType type;
@@ -178,7 +164,6 @@ typedef struct {
 
 
 /* Nodes */
-
 typedef struct {
     AstNodeType type;
     u32 identifier; // Index into str_list
@@ -202,7 +187,6 @@ typedef struct {
 #define AS_IF(___stmt) ((AstStmtIf *)(___stmt))
 #define AS_ABRUPT(___stmt) ((AstStmtAbrupt *)(___stmt))
 #define AS_SINGLE(___stmt) ((AstStmtSingle *)(___stmt))
-#define AS_DECLARATION(___stmt) ((AstStmtDeclaration *)(___stmt))
 #define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
 #define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
 
@@ -222,7 +206,6 @@ AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args);
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
 AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
-AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr);
 AstStmtBlock *make_block(Arena *arena, VarList declarations, AstList *statements);
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
@@ -232,7 +215,6 @@ AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
 AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions);
-
 
 void ast_print(AstNode *head, Str8 *str_list, u32 indent);
 

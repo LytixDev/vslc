@@ -32,7 +32,6 @@ typedef enum {
     PET_LEN,
 } ParseErrorType;
 
-
 extern char *PARSE_ERROR_MSGS[PET_LEN];
 
 typedef struct parse_error_t ParseError;
@@ -52,14 +51,14 @@ typedef struct {
 } ParseResult;
 
 typedef struct {
-    Arena arena; // Allocator for all dynamic allocations performed by the parser
-    Arena lex_arena;
+    Arena *arena; // Allocator for all dynamic allocations performed by the parser
+    Arena *lex_arena;
     Lexer lexer;
     u32 n_errors;
     ParseError *err_head;
     ParseError *err_tail;
 } Parser;
 
-ParseResult parse(char *input);
+ParseResult parse(Arena *arena, Arena *lex_arena, char *input);
 
 #endif /* PARSER_H */

@@ -25,8 +25,6 @@ char *node_type_str_map[AST_NODE_TYPE_LEN] = {
     "EXPR_LITERAL",
     "EXPR_CALL",
 
-    "EXPR_END",
-
     "STMT_WHILE",
     "STMT_IF",
     "STMT_ABRUPT",
@@ -38,14 +36,9 @@ char *node_type_str_map[AST_NODE_TYPE_LEN] = {
     "STMT_BLOCK",
     "STMT_ASSIGNMENT",
     "STMT_FUNC",
-    "STMT_DECLARATION",
-
-    "STMT_END",
 
     "AST_FUNC",
     "AST_LIST",
-    "AST_GLOBAL_DECL",
-    "AST_LOCAL_DECL",
     "AST_ROOT",
 };
 
@@ -116,20 +109,9 @@ AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print
 {
     AstStmtSingle *stmt = m_arena_alloc(arena, sizeof(AstStmtSingle));
     stmt->type = single_type;
-    stmt->print_list = print_list;
+    stmt->node = print_list;
     return stmt;
 }
-
-AstStmtAbrupt *make_abrupt(Arena *arena, AstStmtType abrupt_type, AstExpr *expr)
-{
-    AstStmtAbrupt *stmt = m_arena_alloc(arena, sizeof(AstStmtAbrupt));
-    stmt->type = abrupt_type;
-    stmt->expr = expr;
-    return stmt;
-}
-
-AstStmtDeclaration *make_declaration(Arena *arena);
-
 
 AstStmtBlock *make_block(Arena *arena, VarList declarations, AstList *stmts)
 {
@@ -266,10 +248,15 @@ void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
             ast_print_stmt(stmt->else_, str_list, indent + 1);
         }
     }; break;
+    case STMT_ABRUPT_BREAK:
+    case STMT_ABRUPT_CONTINUE:
+    case STMT_ABRUPT_RETURN:
     case STMT_EXPR:
     case STMT_PRINT: {
         AstStmtSingle *stmt = AS_SINGLE(head);
-        ast_print(stmt->print_list, str_list, indent + 1);
+        if (stmt->node != NULL) {
+            ast_print(stmt->node, str_list, indent + 1);
+        }
     }; break;
     case STMT_BLOCK: {
         AstStmtBlock *stmt = AS_BLOCK(head);
@@ -278,15 +265,6 @@ void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
             printf("%s ", str_list[stmt->declarations.iden_indices[i]].str);
         }
         ast_print((AstNode *)stmt->stmts, str_list, indent + 1);
-    }; break;
-    case STMT_ABRUPT:
-    case STMT_ABRUPT_BREAK:
-    case STMT_ABRUPT_CONTINUE:
-    case STMT_ABRUPT_RETURN: {
-        AstStmtAbrupt *stmt = AS_ABRUPT(head);
-        if (stmt->expr != NULL) {
-            ast_print_expr(stmt->expr, str_list, indent + 1);
-        }
     }; break;
     case STMT_ASSIGNMENT: {
         AstStmtAssignment *stmt = AS_ASSIGNMENT(head);

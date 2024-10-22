@@ -68,14 +68,14 @@ char *PARSE_ERROR_MSGS[PET_LEN] = {
 
 /* Forwards */
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
-static AstNode *parse_expr_list(Parser *parser, bool allow_str);
+static AstNode *parse_expr_list(Parser *parser);
 static AstStmt *parse_stmt(Parser *parser);
 static VarList parse_local_decl_list(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
 static Token next_token(Parser *parser)
 {
-    Token token = lex_next(&parser->lex_arena, &parser->lexer);
+    Token token = lex_next(parser->lex_arena, &parser->lexer);
 #ifdef DEBUG
     printf("Consumed: %s\n", token_type_str_map[token.type]);
 #endif
@@ -86,7 +86,7 @@ static Token peek_token(Parser *parser)
 {
     // TODO: if we need more lookahead, this must change
     // assert(!parser->lexer.has_next);
-    Token token = lex_peek(&parser->lex_arena, &parser->lexer);
+    Token token = lex_peek(parser->lex_arena, &parser->lexer);
     // #ifdef DEBUG
     //     printf("Peek: %s\n", token_type_str_map[token.type]);
     // #endif
@@ -126,7 +126,7 @@ static ParseError *make_parse_error(Arena *arena, Token *failed, ParseErrorType 
 
 static void parse_error_append(Parser *parser, Token *failed, ParseErrorType pet, char *msg)
 {
-    ParseError *parse_error = make_parse_error(&parser->arena, failed, pet, msg);
+    ParseError *parse_error = make_parse_error(parser->arena, failed, pet, msg);
     if (parser->err_head == NULL) {
         parser->err_head = parse_error;
     } else {
@@ -167,7 +167,6 @@ static bool is_relation_op(Token token)
 
 static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
 {
-    // TODO: if we need more lookahead, this must change
     Token token = peek_token(parser);
     if (token.type != expected) {
         next_token(parser);
@@ -183,13 +182,11 @@ static AstExprCall *parse_call(Parser *parser, Token identifier)
     /* Came from TOKEN_IDENTIFIER and then peeked TOKEN_LPAREN */
     next_token(parser);
     AstNode *expr_list = NULL;
-    if (peek_token(parser).type == TOKEN_RPAREN) {
-        next_token(parser);
-    } else {
-        expr_list = parse_expr_list(parser, true);
+    if (!match_token(parser, TOKEN_RPAREN)) {
+        expr_list = parse_expr_list(parser);
         consume_or_err(parser, TOKEN_RPAREN, PET_EXPCETED_CALL_END);
     }
-    return make_call(&parser->arena, identifier.str_list_idx, expr_list);
+    return make_call(parser->arena, identifier.str_list_idx, expr_list);
 }
 
 static AstExpr *parse_primary(Parser *parser)
@@ -208,7 +205,7 @@ static AstExpr *parse_primary(Parser *parser)
     case TOKEN_MINUS: {
         /* Unary minus */
         AstExpr *expr = parse_expr(parser, 0);
-        return (AstExpr *)make_unary(&parser->arena, expr, TOKEN_MINUS);
+        return (AstExpr *)make_unary(parser->arena, expr, TOKEN_MINUS);
     }
     case TOKEN_NUM:
     case TOKEN_IDENTIFIER: {
@@ -218,13 +215,13 @@ static AstExpr *parse_primary(Parser *parser)
         } else if (next.type == TOKEN_LBRACKET) {
             /* Parse array indexing as a binary op */
             next_token(parser);
-            AstExpr *left = (AstExpr *)make_literal(&parser->arena, token);
+            AstExpr *left = (AstExpr *)make_literal(parser->arena, token);
             AstExpr *right = parse_expr(parser, 0);
             consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
-            return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
+            return (AstExpr *)make_binary(parser->arena, left, next.type, right);
         } else {
             /* Parse single identifier */
-            return (AstExpr *)make_literal(&parser->arena, token);
+            return (AstExpr *)make_literal(parser->arena, token);
         }
     }
     default:
@@ -245,7 +242,7 @@ static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 p
 
     next_token(parser);
     AstExpr *right = parse_expr(parser, next_precedence);
-    return (AstExpr *)make_binary(&parser->arena, left, next.type, right);
+    return (AstExpr *)make_binary(parser->arena, left, next.type, right);
 }
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence)
@@ -268,20 +265,19 @@ static AstExprBinary *parse_relation(Parser *parser)
     AstExpr *left = parse_expr(parser, 0);
     Token op = peek_token(parser);
     if (!is_relation_op(op)) {
-        make_parse_error(&parser->arena, &op, PET_CUSTOM, "Expected a relation operator.");
+        make_parse_error(parser->arena, &op, PET_CUSTOM, "Expected a relation operator.");
     } else {
         next_token(parser);
     }
     AstExpr *right = parse_expr(parser, 0);
-    return make_binary(&parser->arena, left, op.type, right);
+    return make_binary(parser->arena, left, op.type, right);
 }
 
-static AstNode *parse_expr_list(Parser *parser, bool allow_str)
+static AstNode *parse_expr_list(Parser *parser)
 {
-    /* allow_str is true means the list parsers strings and/or exprs */
     AstExpr *expr;
-    if (allow_str && peek_token(parser).type == TOKEN_STR) {
-        expr = (AstExpr *)make_literal(&parser->arena, next_token(parser));
+    if (peek_token(parser).type == TOKEN_STR) {
+        expr = (AstExpr *)make_literal(parser->arena, next_token(parser));
     } else {
         expr = parse_expr(parser, 0);
     }
@@ -291,16 +287,16 @@ static AstNode *parse_expr_list(Parser *parser, bool allow_str)
         return (AstNode *)expr;
     }
 
-    AstList *list = make_list(&parser->arena, (AstNode *)expr);
+    AstList *list = make_list(parser->arena, (AstNode *)expr);
     AstListNode *list_node;
     do {
         next_token(parser);
-        if (allow_str && peek_token(parser).type == TOKEN_STR) {
-            expr = (AstExpr *)make_literal(&parser->arena, next_token(parser));
+        if (peek_token(parser).type == TOKEN_STR) {
+            expr = (AstExpr *)make_literal(parser->arena, next_token(parser));
         } else {
             expr = parse_expr(parser, 0);
         }
-        list_node = make_list_node(&parser->arena, (AstNode *)expr);
+        list_node = make_list_node(parser->arena, (AstNode *)expr);
         ast_list_push_back(list, list_node);
     } while (peek_token(parser).type == TOKEN_COMMA);
 
@@ -315,7 +311,7 @@ static AstStmtWhile *parse_while(Parser *parser)
     AstExpr *condition = (AstExpr *)parse_relation(parser);
     consume_or_err(parser, TOKEN_DO, PET_EXPECTED_DO);
     AstStmt *body = parse_stmt(parser);
-    return make_while(&parser->arena, condition, body);
+    return make_while(parser->arena, condition, body);
 }
 
 static AstStmtIf *parse_if(Parser *parser)
@@ -325,12 +321,10 @@ static AstStmtIf *parse_if(Parser *parser)
     consume_or_err(parser, TOKEN_THEN, PET_EXPECTED_THEN);
     AstStmt *then = parse_stmt(parser);
     AstStmt *else_ = NULL;
-    if (peek_token(parser).type == TOKEN_ELSE) {
-        next_token(parser);
+    if (match_token(parser, TOKEN_ELSE)) {
         else_ = parse_stmt(parser);
     }
-
-    return make_if(&parser->arena, condition, then, else_);
+    return make_if(parser->arena, condition, then, else_);
 }
 
 static AstStmtBlock *parse_block(Parser *parser)
@@ -342,7 +336,7 @@ static AstStmtBlock *parse_block(Parser *parser)
     }
 
     AstStmt *first = parse_stmt(parser);
-    AstList *stmts = make_list(&parser->arena, (AstNode *)first);
+    AstList *stmts = make_list(parser->arena, (AstNode *)first);
 
     Token next;
     while ((next = peek_token(parser)).type != TOKEN_END) {
@@ -352,7 +346,7 @@ static AstStmtBlock *parse_block(Parser *parser)
             break;
         }
         AstStmt *stmt = parse_stmt(parser);
-        AstListNode *list_node = make_list_node(&parser->arena, (AstNode *)stmt);
+        AstListNode *list_node = make_list_node(parser->arena, (AstNode *)stmt);
         ast_list_push_back(stmts, list_node);
     }
 
@@ -360,7 +354,7 @@ static AstStmtBlock *parse_block(Parser *parser)
     if (next.type != TOKEN_EOF) {
         next_token(parser);
     }
-    return make_block(&parser->arena, declarations, stmts);
+    return make_block(parser->arena, declarations, stmts);
 }
 
 static AstStmt *parse_stmt(Parser *parser)
@@ -372,29 +366,29 @@ static AstStmt *parse_stmt(Parser *parser)
     case TOKEN_IF:
         return (AstStmt *)parse_if(parser);
     case TOKEN_PRINT: {
-        AstNode *print_list = parse_expr_list(parser, true);
-        return (AstStmt *)make_single(&parser->arena, STMT_PRINT, print_list);
+        AstNode *print_list = parse_expr_list(parser);
+        return (AstStmt *)make_single(parser->arena, STMT_PRINT, print_list);
     }
     case TOKEN_RETURN: {
         AstExpr *expr = parse_expr(parser, 0);
-        return (AstStmt *)make_abrupt(&parser->arena, STMT_ABRUPT_RETURN, expr);
+        return (AstStmt *)make_single(parser->arena, STMT_ABRUPT_RETURN, (AstNode *)expr);
     }
     case TOKEN_IDENTIFIER: {
         Token next = peek_token(parser);
         if (next.type == TOKEN_LPAREN) {
             /* Function call, promoted to a statement */
             AstNode *call = (AstNode *)parse_call(parser, token);
-            return (AstStmt *)make_single(&parser->arena, STMT_EXPR, call);
+            return (AstStmt *)make_single(parser->arena, STMT_EXPR, call);
         }
 
         next_token(parser);
-        AstExpr *left = (AstExpr *)make_literal(&parser->arena, token);
+        AstExpr *left = (AstExpr *)make_literal(parser->arena, token);
 
         if (next.type == TOKEN_LBRACKET) {
             /* Assignment, left-hand side is an array indexing */
             AstExpr *right = parse_expr(parser, 0);
             consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
-            left = (AstExpr *)make_binary(&parser->arena, left, next.type, right);
+            left = (AstExpr *)make_binary(parser->arena, left, next.type, right);
             next = next_token(parser);
         }
 
@@ -404,13 +398,12 @@ static AstStmt *parse_stmt(Parser *parser)
         }
 
         AstExpr *right = parse_expr(parser, 0);
-        return (AstStmt *)make_assignment(&parser->arena, left, right);
+        return (AstStmt *)make_assignment(parser->arena, left, right);
     }
-
     case TOKEN_BREAK:
-        return (AstStmt *)make_abrupt(&parser->arena, STMT_ABRUPT_BREAK, NULL);
+        return (AstStmt *)make_single(parser->arena, STMT_ABRUPT_BREAK, NULL);
     case TOKEN_CONTINUE:
-        return (AstStmt *)make_abrupt(&parser->arena, STMT_ABRUPT_CONTINUE, NULL);
+        return (AstStmt *)make_single(parser->arena, STMT_ABRUPT_CONTINUE, NULL);
     case TOKEN_BEGIN:
         return (AstStmt *)parse_block(parser);
     default:
@@ -421,7 +414,7 @@ static AstStmt *parse_stmt(Parser *parser)
 
 static VarList parse_variable_list(Parser *parser)
 {
-    VarList vars = { .iden_indices = (u32 *)m_arena_alloc_internal(&parser->arena, 4, 4, false),
+    VarList vars = { .iden_indices = (u32 *)m_arena_alloc_internal(parser->arena, 4, 4, false),
                      .len = 0 };
 
     u32 *iden_indices_head = vars.iden_indices;
@@ -432,7 +425,7 @@ static VarList parse_variable_list(Parser *parser)
          */
         if (vars.len != 0) {
             next_token(parser);
-            iden_indices_head = (u32 *)m_arena_alloc_internal(&parser->arena, 4, 4, false);
+            iden_indices_head = (u32 *)m_arena_alloc_internal(parser->arena, 4, 4, false);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
         /* Alloc space for next identifier, store current, update len and head */
@@ -472,7 +465,7 @@ static AstFunction *parse_func(Parser *parser)
     consume_or_err(parser, TOKEN_RPAREN, PET_CUSTOM);
 
     AstStmt *body = parse_stmt(parser);
-    AstFunction *func = make_function(&parser->arena, identifier.str_list_idx, vars, body);
+    AstFunction *func = make_function(parser->arena, identifier.str_list_idx, vars, body);
     return func;
 }
 
@@ -487,9 +480,9 @@ static AstRoot *parse_root(Parser *parser)
         case TOKEN_FUNC: {
             AstFunction *func = parse_func(parser);
             if (functions == NULL) {
-                functions = make_list(&parser->arena, (AstNode *)func);
+                functions = make_list(parser->arena, (AstNode *)func);
             } else {
-                AstListNode *func_node = make_list_node(&parser->arena, (AstNode *)func);
+                AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
                 ast_list_push_back(functions, func_node);
             }
         }; break;
@@ -502,21 +495,21 @@ static AstRoot *parse_root(Parser *parser)
                 if (next.type == TOKEN_LBRACKET) {
                     /* Parse array indexing as a binary op */
                     next_token(parser);
-                    AstExpr *left = (AstExpr *)make_literal(&parser->arena, ident);
+                    AstExpr *left = (AstExpr *)make_literal(parser->arena, ident);
                     AstExpr *right = parse_expr(parser, 0);
                     consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
                     next = peek_token(parser); // Advance
-                    decl = (AstNode *)make_binary(&parser->arena, left, TOKEN_LBRACKET, right);
+                    decl = (AstNode *)make_binary(parser->arena, left, TOKEN_LBRACKET, right);
                 } else {
                     /* Parse single identifier */
-                    decl = (AstNode *)make_literal(&parser->arena, ident);
+                    decl = (AstNode *)make_literal(parser->arena, ident);
                 }
 
                 /* Add newly parsed decl to declarations */
                 if (declarations == NULL) {
-                    declarations = make_list(&parser->arena, decl);
+                    declarations = make_list(parser->arena, decl);
                 } else {
-                    AstListNode *decl_node = make_list_node(&parser->arena, decl);
+                    AstListNode *decl_node = make_list_node(parser->arena, decl);
                     ast_list_push_back(declarations, decl_node);
                 }
 
@@ -534,20 +527,20 @@ static AstRoot *parse_root(Parser *parser)
         }
     }
 
-    return make_root(&parser->arena, declarations, functions);
+    return make_root(parser->arena, declarations, functions);
 }
 
 
-ParseResult parse(char *input)
+ParseResult parse(Arena *arena, Arena *lex_arena, char *input)
 {
     Parser parser = {
+        .arena = arena,
+        .lex_arena = lex_arena,
         .n_errors = 0,
         .err_head = NULL,
         .err_tail = NULL,
     };
     lex_init(&parser.lexer, input);
-    m_arena_init_dynamic(&parser.arena, 2, 512);
-    m_arena_init_dynamic(&parser.lex_arena, 1, 512);
 
     // AstNode *head = (AstNode *)parse_func(&parser);
     AstRoot *head = parse_root(&parser);
