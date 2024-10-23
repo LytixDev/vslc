@@ -268,14 +268,8 @@ Token lex_next(Arena *arena, Lexer *lexer)
             return match(lexer, '<') ? emit(lexer, TOKEN_LSHIFT) : emit(lexer, TOKEN_LESS);
         case '>':
             return match(lexer, '>') ? emit(lexer, TOKEN_RSHIFT) : emit(lexer, TOKEN_GREATER);
-        case ':': {
-            if (match(lexer, '=')) {
-                return emit(lexer, TOKEN_ASSIGNMENT);
-            } else {
-                lex_error_append(arena, lexer, "Expected '=' after ':'");
-                return (Token){ .type = TOKEN_ERR };
-            }
-        };
+        case ':':
+            return match(lexer, '=') ? emit(lexer, TOKEN_ASSIGNMENT) : emit(lexer, TOKEN_COLON);
         case '!': {
             if (match(lexer, '=')) {
                 return emit(lexer, TOKEN_NEQ);
@@ -393,11 +387,11 @@ static Token lex_comment(Arena *arena, Lexer *lexer)
 
 /* Debug stuff */
 char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
-    "ERR",    "NUM",    "STR",      "ASSIGNMENT", "PLUS",  "MINUS", "STAR",
-    "SLASH",  "LSHIFT", "RSHIFT",   "EQ",         "NEQ",   "LESS",  "GREATER",
-    "LPAREN", "RPAREN", "LBRACKET", "RBRACKET",   "COMMA", "EOF",   "IDENTIFIER",
-    "FUNC",   "BEGIN",  "END",      "RETURN",     "PRINT", "BREAK", "CONTINUE",
-    "IF",     "THEN",   "ELSE",     "WHILE",      "DO",    "VAR",
+    "ERR",        "NUM",    "STR",    "COLON",    "ASSIGNMENT", "PLUS",  "MINUS",
+    "STAR",       "SLASH",  "LSHIFT", "RSHIFT",   "EQ",         "NEQ",   "LESS",
+    "GREATER",    "LPAREN", "RPAREN", "LBRACKET", "RBRACKET",   "COMMA", "EOF",
+    "IDENTIFIER", "FUNC",   "BEGIN",  "END",      "RETURN",     "PRINT", "BREAK",
+    "CONTINUE",   "IF",     "THEN",   "ELSE",     "WHILE",      "DO",    "VAR",
 };
 
 

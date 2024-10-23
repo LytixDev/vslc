@@ -20,14 +20,23 @@
 #include "base/types.h"
 #include "lex.h"
 
-/*
- * Holds indices of identifiers into the str_list.
- * iden_indice is stored in contiguous memory on an arena.
- */
-typedef struct var_list_t {
-    u32 *iden_indices;
+
+typedef struct {
+    u32 name; // index into the str_list
+    bool is_array;
+    s32 elements; // a -1 value means the array is dynamic
+} TypeInfo;
+
+typedef struct {
+    u32 identifier; // index into the str_list
+    TypeInfo type_info;
+} TypedVar;
+
+typedef struct {
+    TypedVar *vars; // contiguous array
     u32 len;
-} VarList;
+} TypedVarList;
+
 
 /* Enums */
 typedef enum {
@@ -57,7 +66,6 @@ typedef enum {
     STMT_EXPR,
     STMT_BLOCK,
     STMT_ASSIGNMENT,
-    STMT_FUNC,
     STMT_TYPE_LEN,
 } AstStmtType;
 
@@ -67,12 +75,14 @@ typedef enum {
      */
     AST_FUNC = STMT_TYPE_LEN,
     AST_LIST,
+    AST_NODE_VAR_LIST,
     AST_ROOT,
 
     AST_NODE_TYPE_LEN,
 } AstNodeType;
 
-/* 
+
+/*
  * Headers
  * The way everything is set up means we can always upcast AstExpr's and AstStmt's to AstNode's.
  */
@@ -152,7 +162,7 @@ typedef struct {
 
 typedef struct {
     AstStmtType type;
-    VarList declarations;
+    TypedVarList declarations;
     AstList *stmts;
 } AstStmtBlock;
 
@@ -166,14 +176,20 @@ typedef struct {
 /* Nodes */
 typedef struct {
     AstNodeType type;
+    TypedVarList vars;
+} AstNodeVarList;
+
+typedef struct {
+    AstNodeType type;
     u32 identifier; // Index into str_list
-    VarList vars;
+    TypedVarList parameters;
+    TypeInfo return_type;
     AstStmt *body;
 } AstFunction;
 
 typedef struct {
     AstNodeType type;
-    AstList *declarations; // @NULLABLE
+    AstList *declarations; // @NULLABLE. List contains AstTypedVarList
     AstList *functions; // @NULLABLE
 } AstRoot;
 
@@ -190,6 +206,7 @@ typedef struct {
 #define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
 #define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
 
+#define AS_NODE_VAR_LIST(___node) ((AstNodeVarList *)(___node))
 #define AS_FUNC(___node) ((AstFunction *)(___node))
 #define AS_LIST(___node) ((AstList *)(___node))
 #define AS_ROOT(___node) ((AstRoot *)(___node))
@@ -206,14 +223,16 @@ AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args);
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
 AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
-AstStmtBlock *make_block(Arena *arena, VarList declarations, AstList *statements);
+AstStmtBlock *make_block(Arena *arena, TypedVarList declarations, AstList *statements);
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
-AstFunction *make_function(Arena *arena, u32 identifier, VarList vars, AstStmt *body);
+AstFunction *make_function(Arena *arena, u32 identifier, TypedVarList parameters, AstStmt *body,
+                           TypeInfo return_type);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
+AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars);
 AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions);
 
 void ast_print(AstNode *head, Str8 *str_list, u32 indent);
