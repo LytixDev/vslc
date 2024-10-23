@@ -27,6 +27,7 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_ERR,
     0, // TOKEN_NUM,
     0, // TOKEN_STR,
+    0, // TOKEN_COLON,
     1, // TOKEN_ASSIGNMENT,
     5, // TOKEN_PLUS,
     5, // TOKEN_MINUS,
@@ -70,7 +71,7 @@ char *PARSE_ERROR_MSGS[PET_LEN] = {
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
 static AstNode *parse_expr_list(Parser *parser);
 static AstStmt *parse_stmt(Parser *parser);
-static VarList parse_local_decl_list(Parser *parser);
+static TypedVarList parse_local_decl_list(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
 static Token next_token(Parser *parser)
@@ -175,6 +176,28 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
     }
     next_token(parser);
     return token;
+}
+
+static TypeInfo parse_type(Parser *parser, bool allow_array_types)
+{
+    consume_or_err(parser, TOKEN_COLON, PET_CUSTOM);
+    Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+    if (!match_token(parser, TOKEN_LBRACKET)) {
+        return (TypeInfo){ .name = name.str_list_idx, .is_array = false };
+    }
+    if (!allow_array_types) {
+        consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
+        return (TypeInfo){ .name = name.str_list_idx, .is_array = false };
+    }
+
+    s32 elements = -1;
+    Token peek = peek_token(parser);
+    if (peek.type == TOKEN_NUM) {
+        next_token(parser);
+        elements = peek.num_value;
+    }
+    consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
+    return (TypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
 }
 
 static AstExprCall *parse_call(Parser *parser, Token identifier)
@@ -330,7 +353,7 @@ static AstStmtIf *parse_if(Parser *parser)
 static AstStmtBlock *parse_block(Parser *parser)
 {
     /* Came from TOKEN_BLOCK */
-    VarList declarations = { 0 };
+    TypedVarList declarations = { 0 };
     if (match_token(parser, TOKEN_VAR)) {
         declarations = parse_local_decl_list(parser);
     }
@@ -412,36 +435,37 @@ static AstStmt *parse_stmt(Parser *parser)
     }
 }
 
-static VarList parse_variable_list(Parser *parser)
+static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
 {
-    VarList vars = { .iden_indices = (u32 *)m_arena_alloc_internal(parser->arena, 4, 4, false),
-                     .len = 0 };
+    TypedVarList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, TypedVar), .len = 0 };
 
-    u32 *iden_indices_head = vars.iden_indices;
+    TypedVar *indices_head = typed_vars.vars;
     do {
         /*
          * If not first iteration of loop then we need to consume the comma we already peeked and
          * allocate space for the next identifier.
          */
-        if (vars.len != 0) {
+        if (typed_vars.len != 0) {
             next_token(parser);
-            iden_indices_head = (u32 *)m_arena_alloc_internal(parser->arena, 4, 4, false);
+            indices_head = m_arena_alloc_struct(parser->arena, TypedVar);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
-        /* Alloc space for next identifier, store current, update len and head */
-        *iden_indices_head = identifier.str_list_idx;
-        vars.len++;
+        TypeInfo type_info = parse_type(parser, allow_array_types);
+        TypedVar new = { .identifier = identifier.str_list_idx, .type_info = type_info };
+        /* Alloc space for next TypedVar, store current, update len and head */
+        *indices_head = new;
+        typed_vars.len++;
     } while (peek_token(parser).type == TOKEN_COMMA);
 
-    return vars;
+    return typed_vars;
 }
 
-static VarList parse_local_decl_list(Parser *parser)
+static TypedVarList parse_local_decl_list(Parser *parser)
 {
     /* Came from TOKEN_VAR */
-    VarList identifiers = parse_variable_list(parser);
+    TypedVarList identifiers = parse_variable_list(parser, false);
     while (match_token(parser, TOKEN_VAR)) {
-        VarList next_identifiers = parse_variable_list(parser);
+        TypedVarList next_identifiers = parse_variable_list(parser, false);
         /*
          * Since parse_variable_list ensures the identifiers are stored contigiously, and we do no
          * other allocations on the parser arena, consequetive retain this contigious property.
@@ -458,14 +482,16 @@ static AstFunction *parse_func(Parser *parser)
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
 
     consume_or_err(parser, TOKEN_LPAREN, PET_CUSTOM);
-    VarList vars = { 0 };
+    TypedVarList vars = { 0 };
     if (peek_token(parser).type != TOKEN_RPAREN) {
-        vars = parse_variable_list(parser);
+        vars = parse_variable_list(parser, true);
     }
     consume_or_err(parser, TOKEN_RPAREN, PET_CUSTOM);
 
+    TypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
-    AstFunction *func = make_function(parser->arena, identifier.str_list_idx, vars, body);
+    AstFunction *func =
+        make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
     return func;
 }
 
@@ -488,40 +514,17 @@ static AstRoot *parse_root(Parser *parser)
         }; break;
         case TOKEN_VAR: {
             /* Parse global declarations list */
-            AstNode *decl = NULL;
-            do {
-                Token ident = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
-                next = peek_token(parser);
-                if (next.type == TOKEN_LBRACKET) {
-                    /* Parse array indexing as a binary op */
-                    next_token(parser);
-                    AstExpr *left = (AstExpr *)make_literal(parser->arena, ident);
-                    AstExpr *right = parse_expr(parser, 0);
-                    consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
-                    next = peek_token(parser); // Advance
-                    decl = (AstNode *)make_binary(parser->arena, left, TOKEN_LBRACKET, right);
-                } else {
-                    /* Parse single identifier */
-                    decl = (AstNode *)make_literal(parser->arena, ident);
-                }
-
-                /* Add newly parsed decl to declarations */
-                if (declarations == NULL) {
-                    declarations = make_list(parser->arena, decl);
-                } else {
-                    AstListNode *decl_node = make_list_node(parser->arena, decl);
-                    ast_list_push_back(declarations, decl_node);
-                }
-
-                if (next.type != TOKEN_COMMA) {
-                    break;
-                }
-                next_token(parser); // Consume the comma before we continue
-            } while (1);
-
+            TypedVarList vars = parse_variable_list(parser, true);
+            AstNodeVarList *node_vars = make_node_var_list(parser->arena, vars);
+            if (declarations == NULL) {
+                declarations = make_list(parser->arena, (AstNode *)node_vars);
+            } else {
+                AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
+                ast_list_push_back(declarations, node_node);
+            }
         }; break;
         default: {
-            printf("Not handled oops\n");
+            printf("Not handled oops!\n");
             break;
         };
         }

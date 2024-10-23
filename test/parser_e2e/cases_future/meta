@@ -27,5 +27,5 @@ end
 
 func main() 
 begin
-    print add(40, 2)
+    add(40, 2)
 end

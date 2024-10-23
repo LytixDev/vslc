@@ -1,11 +1,12 @@
 --- GIVEN ---
-func main() begin
+func main(): s32 begin
     print "Hello, World!"
 end
+
 --- EXPECT ---
 AST_ROOT 
  AST_LIST 
-  AST_FUNC name=main vars=
+  AST_FUNC name=main parameters=
    STMT_BLOCK vars=
     AST_LIST 
      STMT_PRINT

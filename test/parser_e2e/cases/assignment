@@ -3,31 +3,28 @@
 
 // This program checks the assignment operator
 
-var array[10]
+var array: s32[10]
 
-func main()
+func main(): s32
 begin
-    var a
+    var a: s32
     a := 3
     array[2] := 2
     print a
 end
 --- EXPECT ---
-AST_ROOT 
- AST_LIST 
-  EXPR_BINARY 
-   op: LBRACKET
-   EXPR_LITERAL array
-   EXPR_LITERAL 10
- AST_LIST 
-  AST_FUNC name=main vars=
-   STMT_BLOCK vars=a 
-    AST_LIST 
+AST_ROOT
+ AST_LIST
+  AST_NODE_VAR_LIST array: s32[10]
+ AST_LIST
+  AST_FUNC name=main parameters=
+   STMT_BLOCK vars=a: s32
+    AST_LIST
      STMT_ASSIGNMENT
       EXPR_LITERAL a
       EXPR_LITERAL 3
      STMT_ASSIGNMENT
-      EXPR_BINARY 
+      EXPR_BINARY
        op: LBRACKET
        EXPR_LITERAL array
        EXPR_LITERAL 2

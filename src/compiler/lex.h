@@ -28,11 +28,11 @@ typedef struct {
 typedef enum {
     TOKEN_ERR = 0,
 
-    // Types
+    // Literal Types
     TOKEN_NUM,
     TOKEN_STR,
 
-    // Assignment
+    TOKEN_COLON,
     TOKEN_ASSIGNMENT, // :=
 
     // Basic arithmetic
