@@ -62,6 +62,7 @@ typedef enum {
     // Identifier and reserved words
     TOKEN_IDENTIFIER,
     TOKEN_FUNC,
+    TOKEN_STRUCT,
     TOKEN_BEGIN,
     TOKEN_END,
     TOKEN_RETURN,

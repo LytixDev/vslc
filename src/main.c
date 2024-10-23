@@ -19,9 +19,10 @@
 #include "compiler/ast.h"
 #include "compiler/parser.h"
 
+#define NICC_IMPLEMENTATION
+#include "base/nicc.h"
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"
-
 
 u32 parser(char *input)
 {

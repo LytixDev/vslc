@@ -499,6 +499,7 @@ static AstRoot *parse_root(Parser *parser)
 {
     AstList *functions = NULL;
     AstList *declarations = NULL;
+    AstList *structs = NULL;
 
     Token next;
     while ((next = next_token(parser)).type != TOKEN_EOF) {
@@ -523,6 +524,18 @@ static AstRoot *parse_root(Parser *parser)
                 ast_list_push_back(declarations, node_node);
             }
         }; break;
+        case TOKEN_STRUCT: {
+            Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+            consume_or_err(parser, TOKEN_ASSIGNMENT, PET_CUSTOM);
+            TypedVarList members = parse_variable_list(parser, true);
+            AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
+            if (structs == NULL) {
+                structs = make_list(parser->arena, (AstNode *)struct_decl);
+            } else {
+                AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
+                ast_list_push_back(structs, node_node);
+            }
+        }; break;
         default: {
             printf("Not handled oops!\n");
             break;
@@ -530,7 +543,7 @@ static AstRoot *parse_root(Parser *parser)
         }
     }
 
-    return make_root(parser->arena, declarations, functions);
+    return make_root(parser->arena, declarations, functions, structs);
 }
 
 

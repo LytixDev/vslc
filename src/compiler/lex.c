@@ -25,8 +25,8 @@
 
 
 char *reserved_words[] = {
-    "func", "begin", "end",  "return", "print", "break", "continue",
-    "if",   "then",  "else", "while",  "do",    "var",
+    "func",     "struct", "begin", "end",  "return", "print", "break",
+    "continue", "if",     "then",  "else", "while",  "do",    "var",
 };
 
 

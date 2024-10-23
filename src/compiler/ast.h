@@ -74,6 +74,7 @@ typedef enum {
      * The way we set up the enum values means we always have space here for the EXPR and STMT vals.
      */
     AST_FUNC = STMT_TYPE_LEN,
+    AST_STRUCT,
     AST_LIST,
     AST_NODE_VAR_LIST,
     AST_ROOT,
@@ -181,7 +182,7 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
-    u32 identifier; // Index into str_list
+    u32 name; // Index into str_list
     TypedVarList parameters;
     TypeInfo return_type;
     AstStmt *body;
@@ -189,8 +190,15 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
+    u32 name; // Index into str_list
+    TypedVarList members;
+} AstStruct;
+
+typedef struct {
+    AstNodeType type;
     AstList *declarations; // @NULLABLE. List contains AstTypedVarList
     AstList *functions; // @NULLABLE
+    AstList *structs; // @NULLABLE
 } AstRoot;
 
 
@@ -208,6 +216,7 @@ typedef struct {
 
 #define AS_NODE_VAR_LIST(___node) ((AstNodeVarList *)(___node))
 #define AS_FUNC(___node) ((AstFunction *)(___node))
+#define AS_STRUCT(___node) ((AstStruct *)(___node))
 #define AS_LIST(___node) ((AstList *)(___node))
 #define AS_ROOT(___node) ((AstRoot *)(___node))
 
@@ -227,13 +236,14 @@ AstStmtBlock *make_block(Arena *arena, TypedVarList declarations, AstList *state
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
-AstFunction *make_function(Arena *arena, u32 identifier, TypedVarList parameters, AstStmt *body,
+AstFunction *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
                            TypeInfo return_type);
+AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
 AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars);
-AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions);
+AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions, AstList *structs);
 
 void ast_print(AstNode *head, Str8 *str_list, u32 indent);
 
