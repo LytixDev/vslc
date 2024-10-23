@@ -1,11 +1,9 @@
 --- GIVEN ---
 // Arrays can only be defined globally
-var array[200]
+var array: s32[200]
 
-// Sizes must be known at compile time
-var a[10*10+2], b[-1*-1], c
 
-func main(x, y, z) begin
+func main(x: s32, y: s32, z: f32): s32 begin
     // array indexing can both be the target of an assignment
     array[2] := 20
     // and an expression
@@ -15,67 +13,44 @@ func main(x, y, z) begin
     array[x] := array[a[x] + y]
 end
 --- EXPECT ---
-AST_ROOT 
- AST_LIST 
-  EXPR_BINARY 
-   op: LBRACKET
-   EXPR_LITERAL array
-   EXPR_LITERAL 200
-  EXPR_BINARY 
-   op: LBRACKET
-   EXPR_LITERAL a
-   EXPR_BINARY 
-    op: PLUS
-    EXPR_BINARY 
-     op: STAR
-     EXPR_LITERAL 10
-     EXPR_LITERAL 10
-    EXPR_LITERAL 2
-  EXPR_BINARY 
-   op: LBRACKET
-   EXPR_LITERAL b
-   EXPR_UNARY STMT_WHILE
-    EXPR_BINARY 
-     op: STAR
-     EXPR_LITERAL 1
-     EXPR_UNARY STMT_WHILE
-      EXPR_LITERAL 1
-  EXPR_LITERAL c
- AST_LIST 
-  AST_FUNC name=main vars=x y z 
+AST_ROOT
+ AST_LIST
+  AST_NODE_VAR_LIST array: s32[200]
+ AST_LIST
+  AST_FUNC name=main parameters=x: s32, y: s32, z: f32
    STMT_BLOCK vars=
-    AST_LIST 
+    AST_LIST
      STMT_ASSIGNMENT
-      EXPR_BINARY 
+      EXPR_BINARY
        op: LBRACKET
        EXPR_LITERAL array
        EXPR_LITERAL 2
       EXPR_LITERAL 20
      STMT_PRINT
-      EXPR_BINARY 
+      EXPR_BINARY
        op: PLUS
-       EXPR_BINARY 
+       EXPR_BINARY
         op: LBRACKET
         EXPR_LITERAL array
         EXPR_LITERAL 10
-       EXPR_BINARY 
+       EXPR_BINARY
         op: LBRACKET
         EXPR_LITERAL array
-        EXPR_BINARY 
+        EXPR_BINARY
          op: PLUS
          EXPR_LITERAL 10
          EXPR_LITERAL 20
      STMT_ASSIGNMENT
-      EXPR_BINARY 
+      EXPR_BINARY
        op: LBRACKET
        EXPR_LITERAL array
        EXPR_LITERAL x
-      EXPR_BINARY 
+      EXPR_BINARY
        op: LBRACKET
        EXPR_LITERAL array
-       EXPR_BINARY 
+       EXPR_BINARY
         op: PLUS
-        EXPR_BINARY 
+        EXPR_BINARY
          op: LBRACKET
          EXPR_LITERAL a
          EXPR_LITERAL x
