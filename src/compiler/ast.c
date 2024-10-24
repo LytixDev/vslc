@@ -151,9 +151,8 @@ AstList *make_list(Arena *arena, AstNode *head)
 {
     AstList *list = m_arena_alloc(arena, sizeof(AstList));
     list->type = AST_LIST;
-    AstListNode head_node = { .this = head, .next = NULL };
-    list->head = head_node;
-    list->tail = &list->head;
+    list->head = make_list_node(arena, head);
+    list->tail = list->head;
     return list;
 }
 
@@ -171,7 +170,7 @@ AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars)
     return node_var_list;
 }
 
-AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions, AstList *structs)
+AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs)
 {
     AstRoot *root = m_arena_alloc(arena, sizeof(AstRoot));
     root->type = AST_ROOT;
@@ -314,15 +313,9 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
     switch (head->type) {
     case AST_ROOT: {
         AstRoot *root = AS_ROOT(head);
-        if (root->declarations != NULL) {
-            ast_print((AstNode *)root->declarations, str_list, indent + 1);
-        }
-        if (root->functions != NULL) {
-            ast_print((AstNode *)root->functions, str_list, indent + 1);
-        }
-        if (root->structs != NULL) {
-            ast_print((AstNode *)root->structs, str_list, indent + 1);
-        }
+        ast_print((AstNode *)(&root->declarations), str_list, indent + 1);
+        ast_print((AstNode *)(&root->functions), str_list, indent + 1);
+        ast_print((AstNode *)(&root->structs), str_list, indent + 1);
     }; break;
     case AST_FUNC: {
         AstFunction *func = AS_FUNC(head);
@@ -339,7 +332,7 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
     }; break;
     case AST_LIST: {
         AstList *list = AS_LIST(head);
-        for (AstListNode *node = &list->head; node != NULL; node = node->next) {
+        for (AstListNode *node = list->head; node != NULL; node = node->next) {
             ast_print(node->this, str_list, indent + 1);
         }
     }; break;

@@ -497,32 +497,33 @@ static AstFunction *parse_func(Parser *parser)
 
 static AstRoot *parse_root(Parser *parser)
 {
-    // TODO: make these 
-    AstList *functions = NULL;
-    AstList *declarations = NULL;
-    AstList *structs = NULL;
+    AstList declarations = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList functions = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList structs = { .type = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
     while ((next = next_token(parser)).type != TOKEN_EOF) {
         switch (next.type) {
         case TOKEN_FUNC: {
             AstFunction *func = parse_func(parser);
-            if (functions == NULL) {
-                functions = make_list(parser->arena, (AstNode *)func);
-            } else {
                 AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
-                ast_list_push_back(functions, func_node);
+            if (functions.head == NULL) {
+                functions.head = func_node;
+                functions.tail = functions.head;
+            } else {
+                ast_list_push_back(&functions, func_node);
             }
         }; break;
         case TOKEN_VAR: {
             /* Parse global declarations list */
             TypedVarList vars = parse_variable_list(parser, true);
             AstNodeVarList *node_vars = make_node_var_list(parser->arena, vars);
-            if (declarations == NULL) {
-                declarations = make_list(parser->arena, (AstNode *)node_vars);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
+            if (declarations.head == NULL) {
+                declarations.head = node_node;
+                declarations.tail = declarations.head;
             } else {
-                AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
-                ast_list_push_back(declarations, node_node);
+                ast_list_push_back(&declarations, node_node);
             }
         }; break;
         case TOKEN_STRUCT: {
@@ -530,11 +531,12 @@ static AstRoot *parse_root(Parser *parser)
             consume_or_err(parser, TOKEN_ASSIGNMENT, PET_CUSTOM);
             TypedVarList members = parse_variable_list(parser, true);
             AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
-            if (structs == NULL) {
-                structs = make_list(parser->arena, (AstNode *)struct_decl);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
+            if (structs.head == NULL) {
+                structs.head = node_node;
+                structs.tail = structs.head;
             } else {
-                AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
-                ast_list_push_back(structs, node_node);
+                ast_list_push_back(&structs, node_node);
             }
         }; break;
         default: {

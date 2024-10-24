@@ -75,15 +75,15 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
     // str_list_print(&compiler->str_list);
 
     /* Find global symbols */
-    for (AstListNode *node = &root->structs->head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->structs.head; node != NULL; node = node->next) {
         u32 type_name = AS_STRUCT(node->this)->name;
         symbol_table_add(compiler, &sym_table_root, SYMBOL_TYPE, type_name, node->this);
     }
-    for (AstListNode *node = &root->functions->head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
         u32 type_name = AS_FUNC(node->this)->name;
         symbol_table_add(compiler, &sym_table_root, SYMBOL_FUNC, type_name, node->this);
     }
-    for (AstListNode *node = &root->declarations->head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->declarations.head; node != NULL; node = node->next) {
         TypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
         for (u32 i = 0; i < vars.len; i++) {
             symbol_table_add(compiler, &sym_table_root, SYMBOL_GLOBAL_VAR, vars.vars[i].identifier, node->this);

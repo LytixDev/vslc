@@ -152,7 +152,7 @@ struct ast_list_node {
 };
 typedef struct {
     AstNodeType type;
-    AstListNode head;
+    AstListNode *head;
     AstListNode *tail;
 } AstList;
 
@@ -196,9 +196,9 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
-    AstList *declarations; // @NULLABLE. List contains AstTypedVarList
-    AstList *functions; // @NULLABLE
-    AstList *structs; // @NULLABLE
+    AstList declarations; // AstTypedVarList
+    AstList functions; // AstFunction
+    AstList structs; // AstStruct
 } AstRoot;
 
 
@@ -243,7 +243,7 @@ AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
 AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars);
-AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions, AstList *structs);
+AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs);
 
 void ast_print(AstNode *head, Str8 *str_list, u32 indent);
 
