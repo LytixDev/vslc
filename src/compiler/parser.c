@@ -497,30 +497,46 @@ static AstFunction *parse_func(Parser *parser)
 
 static AstRoot *parse_root(Parser *parser)
 {
-    AstList *functions = NULL;
-    AstList *declarations = NULL;
+    AstList declarations = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList functions = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList structs = { .type = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
     while ((next = next_token(parser)).type != TOKEN_EOF) {
         switch (next.type) {
         case TOKEN_FUNC: {
             AstFunction *func = parse_func(parser);
-            if (functions == NULL) {
-                functions = make_list(parser->arena, (AstNode *)func);
-            } else {
                 AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
-                ast_list_push_back(functions, func_node);
+            if (functions.head == NULL) {
+                functions.head = func_node;
+                functions.tail = functions.head;
+            } else {
+                ast_list_push_back(&functions, func_node);
             }
         }; break;
         case TOKEN_VAR: {
             /* Parse global declarations list */
             TypedVarList vars = parse_variable_list(parser, true);
             AstNodeVarList *node_vars = make_node_var_list(parser->arena, vars);
-            if (declarations == NULL) {
-                declarations = make_list(parser->arena, (AstNode *)node_vars);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
+            if (declarations.head == NULL) {
+                declarations.head = node_node;
+                declarations.tail = declarations.head;
             } else {
-                AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
-                ast_list_push_back(declarations, node_node);
+                ast_list_push_back(&declarations, node_node);
+            }
+        }; break;
+        case TOKEN_STRUCT: {
+            Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+            consume_or_err(parser, TOKEN_ASSIGNMENT, PET_CUSTOM);
+            TypedVarList members = parse_variable_list(parser, true);
+            AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
+            if (structs.head == NULL) {
+                structs.head = node_node;
+                structs.tail = structs.head;
+            } else {
+                ast_list_push_back(&structs, node_node);
             }
         }; break;
         default: {
@@ -530,7 +546,7 @@ static AstRoot *parse_root(Parser *parser)
         }
     }
 
-    return make_root(parser->arena, declarations, functions);
+    return make_root(parser->arena, declarations, functions, structs);
 }
 
 
@@ -545,13 +561,11 @@ ParseResult parse(Arena *arena, Arena *lex_arena, char *input)
     };
     lex_init(&parser.lexer, input);
 
-    // AstNode *head = (AstNode *)parse_func(&parser);
     AstRoot *head = parse_root(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,
         .head = head,
         .str_list = parser.lexer.str_list,
-        .str_list_len = parser.lexer.str_list_len,
     };
 }

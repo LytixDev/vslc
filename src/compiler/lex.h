@@ -62,6 +62,7 @@ typedef enum {
     // Identifier and reserved words
     TOKEN_IDENTIFIER,
     TOKEN_FUNC,
+    TOKEN_STRUCT,
     TOKEN_BEGIN,
     TOKEN_END,
     TOKEN_RETURN,
@@ -111,10 +112,7 @@ typedef struct lexer_t {
     bool has_next;
     Token next;
 
-    // TODO: maybe not the best datastructure
-    Str8 *str_list;
-    u32 str_list_len;
-    u32 str_list_cap;
+    Str8List str_list; // List of static strings
 
     u32 n_errors;
     LexError *err_head;
