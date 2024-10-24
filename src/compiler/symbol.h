@@ -14,12 +14,17 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#ifndef SYMBOL_H
+#define SYMBOL_H
+
 #include "ast.h"
 #include "base/nicc.h"
 #include "compiler.h"
 
+#define SYM_ERROR 0xFFFFFFFF // u32 max
+
 typedef enum {
-    SYMBOL_GLOBAL_ARRAY,
+    // SYMBOL_GLOBAL_ARRAY,
     SYMBOL_GLOBAL_VAR,
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
@@ -31,31 +36,29 @@ typedef enum {
 
 
 typedef struct symbol_table_t SymbolTable;
-
-typedef struct {
-    SymbolKind type;
-    u32 name; // Index into str_list
-    u32 sequence_number;
-    AstNode *node; // Node which defined this symbol
-
-    SymbolTable *function_symtable; // @NULLABLE
-} Symbol;
-
+typedef struct symbol_t Symbol;
 
 struct symbol_table_t {
     Symbol *symbols;
     u32 sym_len;
     u32 sym_cap;
-    HashMap *hashmap;
+    HashMap hashmap; // Key: string (u8 *), Value: index into symbols array (u32)
     HashMap *hashmap_parent; // @NULLABLE
 };
 
-SymbolTable make_table(HashMap *parent);
-void symbol_table_init(SymbolTable *table);
+struct symbol_t {
+    SymbolKind type;
+    u32 name; // Index into str_list
+    u32 seq_num;
+    AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
+    SymbolTable function_symtable; // Only used when node is AST_FUNC
+};
 
-// Returns the index of the newly added symbol
-u32 symbol_table_add(SymbolTable *table, SymbolKind type, u32 name, AstNode *node);
-u32 symbol_table_get(SymbolTable *table, u32 name);
+
+
+void symbol_table_init(SymbolTable *table, HashMap *parent);
+
+SymbolTable symbol_generate(Compiler *compiler, AstRoot *root);
 
 
 /*
@@ -127,4 +130,13 @@ u32 symbol_table_get(SymbolTable *table, u32 name);
  *
  * main : gen func 4, return type 0
  *   a : gen local 8, type 0
+ *
+ *
+*   --
+      *
+Statically check:
+>no circular dependencies: struct Foo <-> struct Bar
+>do not attempt to use variable or call func which does not exist
+>do not have two funcs or two vars in the same scope with same name
  */
+#endif /* SYMBOL_H */

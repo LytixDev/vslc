@@ -18,7 +18,10 @@
 
 #include "compiler/ast.h"
 #include "compiler/parser.h"
+#include "compiler/symbol.h"
+#include "compiler/compiler.h"
 
+#include "base/str.h"
 #define NICC_IMPLEMENTATION
 #include "base/nicc.h"
 #define SAC_IMPLEMENTATION
@@ -41,12 +44,17 @@ u32 parser(char *input)
         fprintf(stderr, "[%i] %s\n", i + 1, msg);
     }
 
-    if (res.n_errors == 0) {
-        ast_print((AstNode *)res.head, res.str_list, 0);
-        printf("\n");
-    }
+    // if (res.n_errors == 0) {
+    //     ast_print((AstNode *)res.head, res.str_list.strs, 0);
+    //     printf("\n");
+    // }
 
-    free(res.str_list);
+
+    Compiler compiler = { .persist_arena = &arena, .str_list = res.str_list };
+
+    symbol_generate(&compiler, res.head);
+
+    str_list_free(&compiler.str_list);
     m_arena_release(&arena);
     m_arena_release(&lex_arena);
     return res.n_errors;

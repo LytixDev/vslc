@@ -14,13 +14,21 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#ifndef COMPILER_H
+#define COMPILER_H
 
 #include "base/sac_single.h"
 #include "base/types.h"
+#include "base/str.h"
 
 typedef struct {
     bool had_error;
     // For temporary data that ONLY needs to persist for the duration of a single compiler pass
     // Cleared before each pass.
-    Arena pass_arena;
+    Arena *persist_arena;
+    Arena *pass_arena;
+
+    Str8List str_list;
 } Compiler;
+
+#endif /* COMPILER_H */

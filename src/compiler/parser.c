@@ -497,6 +497,7 @@ static AstFunction *parse_func(Parser *parser)
 
 static AstRoot *parse_root(Parser *parser)
 {
+    // TODO: make these 
     AstList *functions = NULL;
     AstList *declarations = NULL;
     AstList *structs = NULL;
@@ -558,13 +559,11 @@ ParseResult parse(Arena *arena, Arena *lex_arena, char *input)
     };
     lex_init(&parser.lexer, input);
 
-    // AstNode *head = (AstNode *)parse_func(&parser);
     AstRoot *head = parse_root(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,
         .head = head,
         .str_list = parser.lexer.str_list,
-        .str_list_len = parser.lexer.str_list_len,
     };
 }

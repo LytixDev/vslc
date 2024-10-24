@@ -42,11 +42,11 @@ u32 parser(char *input)
     }
 
     if (res.n_errors == 0) {
-        ast_print((AstNode *)res.head, res.str_list, 0);
+        ast_print((AstNode *)res.head, res.str_list.strs, 0);
         printf("\n");
     }
 
-    free(res.str_list);
+    str_list_free(&res.str_list);
     m_arena_release(&arena);
     m_arena_release(&lex_arena);
     return res.n_errors;

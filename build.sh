@@ -10,6 +10,7 @@ then
     OUT="vslc-parser"
 fi
 
-CFLAGS="-Isrc -Wall -Wpedantic -Wextra -Wshadow -std=c11 -g -fsanitize=address -fsanitize=undefined"
+CFLAGS="-Isrc -Wall -Wpedantic -Wextra -Wshadow -std=c11 -g"
+#CFLAGS="-Isrc -Wall -Wpedantic -Wextra -Wshadow -std=c11 -g -fsanitize=address -fsanitize=undefined"
 
 cc $CFLAGS $SRCS -o "$OUT"
