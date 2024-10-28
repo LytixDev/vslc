@@ -16,6 +16,7 @@
  */
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "sac_single.h"
 #include "str.h"
@@ -55,6 +56,17 @@ void str_builder_append_cstr(Str8Builder *sb, char *cstr, u32 len)
 
     memcpy((char *)sb->str.str, cstr, len);
     sb->str.len += len;
+}
+
+Str8 str_builder_end(Str8Builder *sb)
+{
+    // TODO: Remove this quirk, or make it more apparent:
+    // Return sb->str, but len does not include null terminator
+    Str8 final = sb->str;
+    assert(final.str[final.len] == 0);
+    assert(final.len != 0);
+    final.len -= 1;
+    return final;
 }
 
 void str_list_init(Str8List *list)

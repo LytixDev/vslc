@@ -119,7 +119,7 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 
 /* Other nodes */
 AstFunction *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
-                           TypeInfo return_type)
+                           AstTypeInfo return_type)
 {
     AstFunction *func = m_arena_alloc(arena, sizeof(AstFunction));
     func->type = AST_FUNC;

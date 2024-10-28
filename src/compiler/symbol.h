@@ -21,7 +21,61 @@
 #include "base/nicc.h"
 #include "compiler.h"
 
-#define SYM_ERROR 0xFFFFFFFF // u32 max
+typedef enum {
+    TYPE_INTEGER = 0,
+    TYPE_BOOL,
+    TYPE_STRUCT,
+    // TYPE_ARRAY,
+    TYPE_FUNC,
+    TYPE_INFO_KIND_LEN
+} TypeInfoKind;
+
+typedef struct {
+    TypeInfoKind kind;
+    bool is_resolved;
+} TypeInfo;
+
+typedef struct {
+    TypeInfo info;
+    u32 size;
+    bool is_signed;
+} TypeInfoInteger;
+
+typedef struct {
+    TypeInfo info;
+} TypeInfoBool;
+
+// NOTE: Not an actual TypeInfo kind
+typedef struct {
+    bool is_resolved;
+    u32 name; // Index into the string list
+    TypeInfo *type;
+    u32 member_offset;
+} TypeInfoStructMember;
+
+typedef struct {
+    TypeInfo info;
+    u32 members_len;
+    TypeInfoStructMember **members;
+} TypeInfoStruct;
+
+// typedef struct {
+//     TypeInfo kind;
+//     TypeInfo *element_type;
+//     s64 elements; // -1 then array is dynamic
+// } TypeInfoArray;
+
+typedef struct {
+    TypeInfo kind;
+    u32 params_len;
+    TypeInfo *param_types;
+    TypeInfo *return_type;
+} TypeInfoFunc;
+
+
+/* Symbol tuff */
+typedef u32 SeqNum;
+#define SYMBOL_NOT_FOUND 0xFFFFFFFF // u32 max
 
 typedef enum {
     // SYMBOL_GLOBAL_ARRAY,
@@ -42,14 +96,20 @@ struct symbol_table_t {
     Symbol *symbols;
     u32 sym_len;
     u32 sym_cap;
+
+    TypeInfo **types; // Holds pointers
+    u32 type_len;
+    u32 type_cap;
+
     HashMap hashmap; // Key: string (u8 *), Value: index into symbols array (u32)
     HashMap *hashmap_parent; // @NULLABLE
 };
 
 struct symbol_t {
-    SymbolKind type;
-    u32 name; // Index into str_list
-    u32 seq_num;
+    SymbolKind kind;
+    SeqNum seq_num;
+    s64 name; // -1 if type has no name, else index into str_list
+    s64 type_idx; // -1 if type is not resolved
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
     SymbolTable function_symtable; // Only used when node is AST_FUNC
 };
@@ -63,19 +123,18 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root);
 
 /*
  * 1. Create symbol table
- * 2. Add all default types (s32, f32, ...) as SYMBOL_TYPE
- * 3. Find all global symbols (global vars, func decls, struct decls, ... )
+ * 2. Add all default types (s32, f32, ...) as types and symbols
+ * 3. Find all global symbols, mostly interested in the types here.
  *    While doing this, check for collisions and report any potential errors.
  *
- * At this point we will not find any more new functions or new types.
+ * 4. Resolve all types. Check for circular dependencies in struct.
  *
- * Check for circular dependencies within a struct !
  *
- * 4. Iteratively create new low-level AST:
+ * 5. Iteratively create new low-level AST:
  *     >Get rid of token information
  *     >Bind correct symbols to the nodes.
  *    Traverse the symbols in the table.
- *    When encountering a function or struct:
+ *    When encountering a function:
  *     >go into it
  *     >generate local symbols
  *     >bind correct types.
@@ -96,44 +155,35 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root);
  *
  * Test:
  * --------------------------------------------------------
-    struct Pair :: a: s32, b: bool
+    struct Pair :: a: s32, b: bool      // Generates Pair
 
-    func foo(a: s32, b: bool): Pair
+    func foo(a: s32, b: bool): Pair     // Generates foo
     begin
         var pair: Pair
         pair := Pair(a, b)
         return pair
     end
 
-    func main(): s32
+    func main(): s32                    // Generates main
     begin
-        var a: s32
+        var a: s32, b: Pair
         a := 10
-        foo(a, true)
+        b := foo(a, true)
     end
  * --------------------------------------------------------
- *  1. []
- *  2. [s32, bool]
- *  3. [s32, bool, Pair, foo, main]
- *  4. [s32, bool, Pair, foo, main, a, b, pair, a]
+ *  1. [], []
  *
- *  How the functions and structs will look like
+ *  2. [s32, bool], [{int, 32}, {bool}]
  *
- *  Pair : gen type 2
- *    a : type 0
- *    b : type 1
+ *  3. [s32, bool, Pair, foo, main], 
+ *     [{int, 32}, {bool}, {struct, [a: s32, b: bool]},
+ *      {func, [a: s32, b: bool], Pair}, {func, [], s32}]
  *
- * foo : gen func 3, return type 2
- *   a : gen param 5, type 0
- *   b : gen param 6, type 1
- *   pair : gen local 7, type 2
- *
- * main : gen func 4, return type 0
- *   a : gen local 8, type 0
+ *  5. [s32, bool, Pair, foo, main, a, b, pair, a]
+ *     [{int, 32}, {bool}, {struct, [a: s32, b: bool]},
+ *      {func, [a: s32, b: bool], Pair}, {func, [], s32}]
  *
  *
-*   --
-      *
 Statically check:
 >no circular dependencies: struct Foo <-> struct Bar
 >do not attempt to use variable or call func which does not exist

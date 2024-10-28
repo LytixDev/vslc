@@ -25,11 +25,11 @@ typedef struct {
     u32 name; // index into the str_list
     bool is_array;
     s32 elements; // a -1 value means the array is dynamic
-} TypeInfo;
+} AstTypeInfo;
 
 typedef struct {
     u32 identifier; // index into the str_list
-    TypeInfo type_info;
+    AstTypeInfo type_info;
 } TypedVar;
 
 typedef struct {
@@ -39,6 +39,7 @@ typedef struct {
 
 
 /* Enums */
+/* High-level AST: */
 typedef enum {
     LIT_STR,
     LIT_IDENT,
@@ -82,6 +83,10 @@ typedef enum {
     AST_NODE_TYPE_LEN,
 } AstNodeType;
 
+/* Low-level AST: */
+typedef enum {
+    AST_LL_TYPE_LEN,
+} AstLLType;
 
 /*
  * Headers
@@ -184,7 +189,7 @@ typedef struct {
     AstNodeType type;
     u32 name; // Index into str_list
     TypedVarList parameters;
-    TypeInfo return_type;
+    AstTypeInfo return_type;
     AstStmt *body;
 } AstFunction;
 
@@ -197,9 +202,10 @@ typedef struct {
 typedef struct {
     AstNodeType type;
     AstList declarations; // AstTypedVarList
-    AstList functions; // AstFunction
     AstList structs; // AstStruct
+    AstList functions; // AstFunction
 } AstRoot;
+
 
 
 #define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
@@ -237,7 +243,7 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
 AstFunction *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
-                           TypeInfo return_type);
+                           AstTypeInfo return_type);
 AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);

@@ -150,7 +150,8 @@ static Token emit(Lexer *lexer, TokenType type)
 static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenType type)
 {
     Token token = emit(lexer, type);
-    token.str_list_idx = str_list_push(&lexer->str_list, sb->str);
+    Str8 final = str_builder_end(sb);
+    token.str_list_idx = str_list_push(&lexer->str_list, final);
     return token;
 }
 

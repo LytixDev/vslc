@@ -178,16 +178,16 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
     return token;
 }
 
-static TypeInfo parse_type(Parser *parser, bool allow_array_types)
+static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
 {
     consume_or_err(parser, TOKEN_COLON, PET_CUSTOM);
     Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
     if (!match_token(parser, TOKEN_LBRACKET)) {
-        return (TypeInfo){ .name = name.str_list_idx, .is_array = false };
+        return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
     }
     if (!allow_array_types) {
         consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
-        return (TypeInfo){ .name = name.str_list_idx, .is_array = false };
+        return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
     }
 
     s32 elements = -1;
@@ -197,7 +197,7 @@ static TypeInfo parse_type(Parser *parser, bool allow_array_types)
         elements = peek.num_value;
     }
     consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
-    return (TypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
+    return (AstTypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
 }
 
 static AstExprCall *parse_call(Parser *parser, Token identifier)
@@ -450,7 +450,7 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
             indices_head = m_arena_alloc_struct(parser->arena, TypedVar);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
-        TypeInfo type_info = parse_type(parser, allow_array_types);
+        AstTypeInfo type_info = parse_type(parser, allow_array_types);
         TypedVar new = { .identifier = identifier.str_list_idx, .type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
@@ -488,7 +488,7 @@ static AstFunction *parse_func(Parser *parser)
     }
     consume_or_err(parser, TOKEN_RPAREN, PET_CUSTOM);
 
-    TypeInfo return_type = parse_type(parser, true);
+    AstTypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
     AstFunction *func =
         make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
