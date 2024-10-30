@@ -28,8 +28,8 @@ typedef struct {
 } AstTypeInfo;
 
 typedef struct {
-    u32 identifier; // index into the str_list
-    AstTypeInfo type_info;
+    u32 name; // index into the str_list
+    AstTypeInfo ast_type_info;
 } TypedVar;
 
 typedef struct {
@@ -191,7 +191,7 @@ typedef struct {
     TypedVarList parameters;
     AstTypeInfo return_type;
     AstStmt *body;
-} AstFunction;
+} AstFunc;
 
 typedef struct {
     AstNodeType type;
@@ -221,7 +221,7 @@ typedef struct {
 #define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
 
 #define AS_NODE_VAR_LIST(___node) ((AstNodeVarList *)(___node))
-#define AS_FUNC(___node) ((AstFunction *)(___node))
+#define AS_FUNC(___node) ((AstFunc *)(___node))
 #define AS_STRUCT(___node) ((AstStruct *)(___node))
 #define AS_LIST(___node) ((AstList *)(___node))
 #define AS_ROOT(___node) ((AstRoot *)(___node))
@@ -242,7 +242,7 @@ AstStmtBlock *make_block(Arena *arena, TypedVarList declarations, AstList *state
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
-AstFunction *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
+AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
                            AstTypeInfo return_type);
 AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members);
 AstListNode *make_list_node(Arena *arena, AstNode *this);

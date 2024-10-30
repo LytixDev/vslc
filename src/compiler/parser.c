@@ -451,7 +451,7 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
         AstTypeInfo type_info = parse_type(parser, allow_array_types);
-        TypedVar new = { .identifier = identifier.str_list_idx, .type_info = type_info };
+        TypedVar new = { .name = identifier.str_list_idx, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
         typed_vars.len++;
@@ -475,7 +475,7 @@ static TypedVarList parse_local_decl_list(Parser *parser)
     return identifiers;
 }
 
-static AstFunction *parse_func(Parser *parser)
+static AstFunc *parse_func(Parser *parser)
 {
     /* Came from TOKEN_FUNC */
     // consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
@@ -490,7 +490,7 @@ static AstFunction *parse_func(Parser *parser)
 
     AstTypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
-    AstFunction *func =
+    AstFunc *func =
         make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
     return func;
 }
@@ -505,7 +505,7 @@ static AstRoot *parse_root(Parser *parser)
     while ((next = next_token(parser)).type != TOKEN_EOF) {
         switch (next.type) {
         case TOKEN_FUNC: {
-            AstFunction *func = parse_func(parser);
+            AstFunc *func = parse_func(parser);
                 AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
             if (functions.head == NULL) {
                 functions.head = func_node;

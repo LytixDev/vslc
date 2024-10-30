@@ -25,13 +25,14 @@ typedef enum {
     TYPE_INTEGER = 0,
     TYPE_BOOL,
     TYPE_STRUCT,
-    // TYPE_ARRAY,
+    TYPE_ARRAY,
     TYPE_FUNC,
     TYPE_INFO_KIND_LEN
 } TypeInfoKind;
 
 typedef struct {
     TypeInfoKind kind;
+    u32 generated_by_name; // Not used by TYPE_ARRAY
     bool is_resolved;
 } TypeInfo;
 
@@ -49,8 +50,11 @@ typedef struct {
 typedef struct {
     bool is_resolved;
     u32 name; // Index into the string list
-    TypeInfo *type;
     u32 member_offset;
+    union {
+        TypeInfo *type;
+        u32 type_name;
+    };
 } TypeInfoStructMember;
 
 typedef struct {
@@ -59,31 +63,30 @@ typedef struct {
     TypeInfoStructMember **members;
 } TypeInfoStruct;
 
-// typedef struct {
-//     TypeInfo kind;
-//     TypeInfo *element_type;
-//     s64 elements; // -1 then array is dynamic
-// } TypeInfoArray;
+typedef struct {
+    TypeInfo info;
+    TypeInfo *element_type;
+    s32 elements; // -1 then array is dynamic
+} TypeInfoArray;
 
 typedef struct {
-    TypeInfo kind;
-    u32 params_len;
-    TypeInfo *param_types;
+    TypeInfo info;
+    u32 n_params;
+    u32 *param_names;
+    TypeInfo **param_types;
     TypeInfo *return_type;
 } TypeInfoFunc;
 
 
 /* Symbol tuff */
-typedef u32 SeqNum;
-#define SYMBOL_NOT_FOUND 0xFFFFFFFF // u32 max
 
 typedef enum {
     // SYMBOL_GLOBAL_ARRAY,
+    SYMBOL_TYPE,
+    SYMBOL_FUNC,
     SYMBOL_GLOBAL_VAR,
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
-    SYMBOL_FUNC,
-    SYMBOL_TYPE,
 
     SYMBOL_TYPE_LEN,
 } SymbolKind;
@@ -93,23 +96,22 @@ typedef struct symbol_table_t SymbolTable;
 typedef struct symbol_t Symbol;
 
 struct symbol_table_t {
-    Symbol *symbols;
+    Symbol **symbols;
     u32 sym_len;
     u32 sym_cap;
 
-    TypeInfo **types; // Holds pointers
+    TypeInfo **types;
     u32 type_len;
     u32 type_cap;
 
-    HashMap hashmap; // Key: string (u8 *), Value: index into symbols array (u32)
-    HashMap *hashmap_parent; // @NULLABLE
+    HashMap map; // Key: string (u8 *), Value: *Symbol
+    SymbolTable *parent; // @NULLABLE
 };
 
 struct symbol_t {
     SymbolKind kind;
-    SeqNum seq_num;
-    s64 name; // -1 if type has no name, else index into str_list
-    s64 type_idx; // -1 if type is not resolved
+    u32 name;
+    TypeInfo *type_info; // @NULLABLE
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
     SymbolTable function_symtable; // Only used when node is AST_FUNC
 };

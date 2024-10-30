@@ -69,7 +69,7 @@ int main(void)
     char c;
     u32 i = 0;
     while ((c = getchar()) != EOF) {
-        if (input_arena.offset > input_arena.pages_commited * 4096) {
+        if (input_arena.offset >= input_arena.pages_commited * 4096) {
             m_arena_alloc_zero(&input_arena, 4096);
         }
         input[i] = c;

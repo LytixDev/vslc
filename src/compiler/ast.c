@@ -118,10 +118,10 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 }
 
 /* Other nodes */
-AstFunction *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
+AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
                            AstTypeInfo return_type)
 {
-    AstFunction *func = m_arena_alloc(arena, sizeof(AstFunction));
+    AstFunc *func = m_arena_alloc(arena, sizeof(AstFunc));
     func->type = AST_FUNC;
     func->name = name;
     func->parameters = parameters;
@@ -192,11 +192,11 @@ static void ast_print_typed_var_list(Str8 *str_list, TypedVarList vars)
 {
     for (u32 i = 0; i < vars.len; i++) {
         TypedVar var = vars.vars[i];
-        if (var.type_info.is_array) {
-            printf("%s: %s[%d]", str_list[var.identifier].str, str_list[var.type_info.name].str,
-                   var.type_info.elements);
+        if (var.ast_type_info.is_array) {
+            printf("%s: %s[%d]", str_list[var.name].str, str_list[var.ast_type_info.name].str,
+                   var.ast_type_info.elements);
         } else {
-            printf("%s: %s", str_list[var.identifier].str, str_list[var.type_info.name].str);
+            printf("%s: %s", str_list[var.name].str, str_list[var.ast_type_info.name].str);
         }
         if (i != vars.len - 1) {
             printf(", ");
@@ -318,7 +318,7 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
         ast_print((AstNode *)(&root->structs), str_list, indent + 1);
     }; break;
     case AST_FUNC: {
-        AstFunction *func = AS_FUNC(head);
+        AstFunc *func = AS_FUNC(head);
         printf("name=%s", str_list[func->name].str);
         printf(" parameters=");
         ast_print_typed_var_list(str_list, func->parameters);

@@ -22,12 +22,13 @@
 #include "compiler.h"
 #include "compiler/ast.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 
-static void *make_type_info(Arena *arena, TypeInfoKind kind)
+static void *make_type_info(Arena *arena, TypeInfoKind kind, u32 generated_by_name)
 {
     TypeInfo *info;
     switch (kind) {
@@ -43,115 +44,111 @@ static void *make_type_info(Arena *arena, TypeInfoKind kind)
     case TYPE_FUNC:
         info = m_arena_alloc(arena, sizeof(TypeInfoFunc));
         break;
+    case TYPE_ARRAY:
+        info = m_arena_alloc(arena, sizeof(TypeInfoArray));
+        break;
     default:
         ASSERT_NOT_REACHED;
     };
 
     info->kind = kind;
     info->is_resolved = false;
+    info->generated_by_name = generated_by_name;
     return info;
 }
 
-static SeqNum symbol_lookup(HashMap *m, Str8 name)
+static SymbolTable make_symt(SymbolTable *parent)
 {
-    SeqNum *seq_num = hashmap_get(m, name.str, name.len);
-    if (seq_num == NULL) {
-        return SYMBOL_NOT_FOUND;
-    }
-    return (SeqNum)seq_num;
+    SymbolTable symt = { .sym_len = 0, .sym_cap = 16, .type_len = 0, .type_cap = 16, .parent = parent };
+    symt.symbols = malloc(sizeof(Symbol *) * symt.sym_cap);
+    symt.types = malloc(sizeof(TypeInfo *) * symt.type_cap);
+    hashmap_init(&symt.map);
+    return symt;
 }
 
-static void symbol_store(HashMap *m, Str8 name, SeqNum seq_num)
+static Symbol *symt_new_sym(Arena *arena, Str8List str_list, SymbolTable *symt, SymbolKind kind, u32 name, TypeInfo *type_info, AstNode *node)
 {
-    hashmap_put(m, name.str, name.len, (void *)(size_t)(seq_num + 1), sizeof(void *), false);
-}
-
-static SymbolTable make_symbol_table(HashMap *parent)
-{
-    SymbolTable sym_table = { .sym_len = 0, .sym_cap = 16, .type_len = 0, .type_cap = 16,
-                              .hashmap_parent = parent };
-    sym_table.symbols = malloc(sizeof(Symbol) * sym_table.sym_cap);
-    sym_table.types = malloc(sizeof(TypeInfo) * sym_table.type_cap);
-    hashmap_init(&sym_table.hashmap);
-    return sym_table;
-}
-
-static u32 symbol_table_add_symbol(SymbolTable *table, Symbol symbol)
-{
-    if (table->sym_len >= table->sym_cap) {
-        table->sym_cap *= 2;
-        table->symbols = realloc(table->symbols, sizeof(Symbol) * table->sym_cap);
-    }
-
-    table->symbols[table->sym_len] = symbol;
-    table->sym_len++;
-    return table->sym_len - 1;
-}
-
-static u32 symbol_table_add_type(SymbolTable *table, TypeInfo *type)
-{
-    if (table->type_len >= table->type_cap) {
-        table->type_cap *= 2;
-        table->types = realloc(table->types, sizeof(TypeInfo *) * table->type_cap);
-    }
-
-    table->types[table->type_len] = type;
-    table->type_len++;
-    return table->type_len - 1;
-}
-
-// Returns the index of the newly added symbol
-static u32 symbol_table_add(Str8List str_list, SymbolTable *table, SymbolKind type, s64 name, s64 type_idx, AstNode *node)
-{
-    SeqNum seq_num = table->sym_len;
-    Symbol symbol = { .kind = type, .name = name, .type_idx = type_idx, .seq_num = seq_num, .node = node };
-    if (node != NULL && node->type == AST_FUNC) {
-        symbol.function_symtable = make_symbol_table(&table->hashmap);
-    }
-
+    // TODO: check if symbol already exists
     // TODO: A local symbol is not allowed to exist as a global func or type
     // if type == SYMBOL_LOCAL_VAR, traverse parents of hasmaps and ensure no exists
-    Str8 symbol_name = str_list.strs[name];
-    SeqNum lookup_seq = symbol_lookup(&table->hashmap, symbol_name);
-    if (lookup_seq != SYMBOL_NOT_FOUND) {
-        // TODO: report error
-        printf("Symbol already exists\n");
-        return SYMBOL_NOT_FOUND;
+    Symbol *sym = m_arena_alloc(arena, sizeof(Symbol));
+    sym->kind = kind;
+    sym->name = name;
+    sym->type_info = type_info;
+    sym->node = node;
+    if (kind == SYMBOL_FUNC) {
+        sym->function_symtable = make_symt(symt);
     }
 
-    symbol_store(&table->hashmap, symbol_name, seq_num);
-    symbol_table_add_symbol(table, symbol);
-    return seq_num;
+    if (symt->sym_len >= symt->sym_cap) {
+        symt->sym_cap *= 2;
+        symt->symbols = realloc(symt->symbols, sizeof(Symbol *) * symt->sym_cap);
+    }
+
+    symt->symbols[symt->sym_len] = sym;
+    symt->sym_len++;
+
+    Str8 sym_name = str_list.strs[name];
+    hashmap_put(&symt->map, sym_name.str, sym_name.len, sym, sizeof(Symbol *), false);
+
+    return sym;
+}
+
+static Symbol *symt_find_sym(SymbolTable *symt, Str8 key)
+{
+    Symbol *sym = NULL;
+    SymbolTable *t = symt;
+    while (sym == NULL && t != NULL) {
+        sym = hashmap_get(&t->map, key.str, key.len);
+        t = t->parent;
+    }
+    return sym;
+}
+
+static TypeInfo *ast_type_resolve(Arena *arena, SymbolTable *symt, Str8List str_list, AstTypeInfo ati)
+{
+    Str8 key = str_list.strs[ati.name];
+    Symbol *sym = symt_find_sym(symt, key);
+    if (sym == NULL) {
+        printf("ERR: Type not found\n");
+        return NULL;
+    }
+    if (sym->kind != SYMBOL_TYPE) {
+        printf("ERR: Expected symbol to be type, but found X\n");
+        return NULL;
+    }
+    assert(sym->type_info != NULL);
+    if (ati.is_array == false) {
+        return sym->type_info;
+    }
+
+    TypeInfoArray *t = make_type_info(arena, TYPE_ARRAY, 0);
+    t->elements = ati.elements;
+    t->element_type = sym->type_info;
+    t->info.is_resolved = true;
+    return (TypeInfo *)t;
 }
 
 
-static TypeInfoStruct *struct_decl_to_type(Arena *arena, Str8List str_list, SymbolTable *sym_table, AstStruct *decl)
+static TypeInfoStruct *struct_decl_to_type(Arena *arena, Str8List str_list, SymbolTable *symt, AstStruct *decl)
 {
-    TypeInfoStruct *type_info = make_type_info(arena, TYPE_STRUCT);
+    TypeInfoStruct *type_info = make_type_info(arena, TYPE_STRUCT, decl->name);
     type_info->members = m_arena_alloc(arena, sizeof(TypeInfoStructMember *) * decl->members.len);
     type_info->members_len = decl->members.len;
     type_info->info.is_resolved = true;
     for (u32 i = 0; i < decl->members.len; i++) {
-        // TODO: not ignore: member->is_array, member->elements
+        TypedVar tv = decl->members.vars[i];
         TypeInfoStructMember *member = m_arena_alloc(arena, sizeof(TypeInfoStructMember));
         type_info->members[i] = member;
         member->is_resolved = false;
-        member->name = decl->name;
+        member->name = tv.name;
+        member->type_name = tv.ast_type_info.name;
 
-        TypedVar tv = decl->members.vars[i];
-        Str8 type_str = str_list.strs[tv.type_info.name];
-        SeqNum member_sym_seq = symbol_lookup(&sym_table->hashmap, type_str);
-        if (member_sym_seq == SYMBOL_NOT_FOUND) {
-            continue;
+        TypeInfo *t = ast_type_resolve(arena, symt, str_list, tv.ast_type_info);
+        if (t != NULL) {
+            member->is_resolved = true;
         }
-        Symbol member_sym_type = sym_table->symbols[member_sym_seq - 1];
-        if (member_sym_type.kind != SYMBOL_TYPE) {
-            printf("Struct member of type X, but X is not type, but a Y...");
-            continue;
-        }
-
-        member->type = sym_table->types[member_sym_type.type_idx];
-        member->is_resolved = true;
+        member->type = t;
     }
 
     for (u32 i = 0; i < type_info->members_len; i++) {
@@ -163,41 +160,119 @@ static TypeInfoStruct *struct_decl_to_type(Arena *arena, Str8List str_list, Symb
     return type_info;
 }
 
+static TypeInfoFunc *func_decl_to_type(Arena *arena, Str8List str_list, SymbolTable *symt, AstFunc *decl)
+{
+
+    TypeInfoFunc *type_info = make_type_info(arena, TYPE_FUNC, decl->name);
+    type_info->n_params = decl->parameters.len;
+    type_info->param_names = m_arena_alloc(arena, sizeof(u32) * type_info->n_params);
+    type_info->param_types = m_arena_alloc(arena, sizeof(TypeInfo *) * type_info->n_params);
+    type_info->info.is_resolved = true;
+
+    TypeInfo *return_type = ast_type_resolve(arena, symt, str_list, decl->return_type);
+    type_info->return_type = return_type;
+    if (return_type == NULL) {
+        type_info->info.is_resolved = false;
+    }
+
+    for (u32 i = 0; i < decl->parameters.len; i++) {
+        TypedVar tv = decl->parameters.vars[i];
+        type_info->param_names[i] = tv.name;
+        // type_info->param_types[i] = NULL;
+
+        TypeInfo *t = ast_type_resolve(arena, symt, str_list, tv.ast_type_info);
+        if (t == NULL) {
+            type_info->info.is_resolved = false;
+        }
+        type_info->param_types[i] = t;
+    }
+
+    return type_info;
+}
+
+/* --- PRINT --- */
+static void type_info_print(Str8List list, TypeInfo *info)
+{
+    printf("[%s] ", info->is_resolved ? "R" : "U");
+    switch (info->kind) {
+        case TYPE_INTEGER: {
+            TypeInfoInteger *t = (TypeInfoInteger *)info;
+            printf("int {size: %d, is_signed: %d}", t->size, t->is_signed);
+        } break;
+        case TYPE_BOOL:
+            printf("bool");
+            break;
+        case TYPE_STRUCT: {
+            TypeInfoStruct *t = (TypeInfoStruct *)info;
+            printf("struct {");
+            for (u32 i = 0; i < t->members_len; i++) {
+                TypeInfoStructMember *member = t->members[i];
+                Str8 name = list.strs[member->name];
+                if (member->is_resolved) {
+                    u32 generated_by = member->type->generated_by_name;
+                    Str8 s = list.strs[generated_by];
+                    printf("%s: %s, ", name.str, s.str);
+                } else {
+                    Str8 type_name = list.strs[member->type_name];
+                    printf("%s: {unresolved : }, ", type_name.str); 
+                }
+            }
+            putchar('}');
+        } break;
+        case TYPE_ARRAY: {
+            TypeInfoArray *t = (TypeInfoArray *)info;
+            Str8 element_type_name = list.strs[t->info.generated_by_name];
+            printf("array %s[%d], type: ", element_type_name.str, t->elements);
+        } break;
+        case TYPE_FUNC: {
+            TypeInfoFunc *t = (TypeInfoFunc *)info;
+            printf("func {return_type: %s, ", list.strs[t->return_type->generated_by_name].str);
+            printf("params: [");
+            for (u32 i = 0; i < t->n_params; i++) {
+                Str8 name = list.strs[t->param_names[i]];
+                Str8 type_name = list.strs[t->param_types[i]->generated_by_name];
+                printf("%s: %s, ", name.str, type_name.str);
+            }
+            printf("]}");
+        } break;
+        default:
+            break;
+    }
+}
+
 
 
 SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
 {
-    SymbolTable sym_table_root = make_symbol_table(NULL);
+    SymbolTable symt_root = make_symt(NULL);
 
     /* Fill symbol table with builtin types */
-    TypeInfoInteger *s32_builtin = make_type_info(compiler->persist_arena, TYPE_INTEGER);
-    s32_builtin->info.is_resolved = true;
-    s32_builtin->size = 32;
-    s32_builtin->is_signed = false;
-    u32 type_handle = symbol_table_add_type(&sym_table_root, (TypeInfo *)s32_builtin);
-    u32 name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "s32");
-    symbol_table_add(compiler->str_list, &sym_table_root, SYMBOL_TYPE, name, type_handle, NULL);
+    {
+        u32 name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "s32");
+        TypeInfoInteger *s32_builtin = make_type_info(compiler->persist_arena, TYPE_INTEGER, name);
+        s32_builtin->info.is_resolved = true;
+        s32_builtin->size = 32;
+        s32_builtin->is_signed = true;
+        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_TYPE, name, (TypeInfo *)s32_builtin, NULL);
 
-    TypeInfoBool *bool_builtin = make_type_info(compiler->persist_arena, TYPE_BOOL);
-    bool_builtin->info.is_resolved = true;
-    type_handle = symbol_table_add_type(&sym_table_root, (TypeInfo *)bool_builtin);
-    name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "bool");
-    symbol_table_add(compiler->str_list, &sym_table_root, SYMBOL_TYPE, name, type_handle, NULL);
-
-    // str_list_print(&compiler->str_list);
+        name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "bool");
+        TypeInfoBool *bool_builtin = make_type_info(compiler->persist_arena, TYPE_BOOL, name);
+        bool_builtin->info.is_resolved = true;
+        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_TYPE, name, (TypeInfo *)bool_builtin, NULL);
+    }
 
     /* Find global symbols */
     for (AstListNode *node = root->structs.head; node != NULL; node = node->next) {
         AstStruct *struct_decl = AS_STRUCT(node->this);
-        TypeInfoStruct *t = struct_decl_to_type(compiler->persist_arena, compiler->str_list, &sym_table_root, struct_decl);
-        u32 type_idx = symbol_table_add_type(&sym_table_root, (TypeInfo *)t);
-        symbol_table_add(compiler->str_list, &sym_table_root, SYMBOL_TYPE, struct_decl->name, type_idx, node->this);
+        TypeInfoStruct *t = struct_decl_to_type(compiler->persist_arena, compiler->str_list, &symt_root, struct_decl);
+        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_TYPE, struct_decl->name, (TypeInfo *)t, node->this);
+    }
+    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
+        AstFunc *func_decl = AS_FUNC(node->this);
+        TypeInfoFunc *t = func_decl_to_type(compiler->persist_arena, compiler->str_list, &symt_root, func_decl);
+        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_FUNC, func_decl->name, (TypeInfo *)t, node->this);
     }
     /*
-    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
-        u32 type_name = AS_FUNC(node->this)->name;
-        symbol_table_add(compiler, &sym_table_root, SYMBOL_FUNC, type_name, node->this);
-    }
     for (AstListNode *node = root->declarations.head; node != NULL; node = node->next) {
         TypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
         for (u32 i = 0; i < vars.len; i++) {
@@ -212,20 +287,20 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
 
 
     // Print symbols
-    for (u32 i = 0; i < sym_table_root.sym_len; i++) {
-        Symbol symbol = sym_table_root.symbols[i];
-        printf("[%d] %s", symbol.seq_num, compiler->str_list.strs[symbol.name].str);
-        if (symbol.type_idx == -1) {
+    for (u32 i = 0; i < symt_root.sym_len; i++) {
+        Symbol *sym = symt_root.symbols[i];
+        printf("%s", compiler->str_list.strs[sym->name].str);
+        if (sym->type_info == NULL) {
             putchar('\n');
             continue;
         }
         // Print type
-        TypeInfo *type_info = sym_table_root.types[symbol.type_idx];
-        printf(" -> %d, is_resolved %d\n", type_info->kind, type_info->is_resolved);
+        //printf(" -> %d, is_resolved %d\n", sym->type_info->kind, sym->type_info->is_resolved);
+        printf("\t-> ");
+        type_info_print(compiler->str_list, sym->type_info);
+        putchar('\n');
     }
 
 
- //3. Find all global symbols (global vars, func decls, struct decls, ... )
- //   While doing this, check for collisions and report any potential errors.
     return (SymbolTable){ 0 };
 }
