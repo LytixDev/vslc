@@ -207,7 +207,6 @@ typedef struct {
 } AstRoot;
 
 
-
 #define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
 #define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
 #define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
@@ -243,7 +242,7 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
 AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
-                           AstTypeInfo return_type);
+                       AstTypeInfo return_type);
 AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);

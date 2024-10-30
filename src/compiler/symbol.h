@@ -32,8 +32,8 @@ typedef enum {
 
 typedef struct {
     TypeInfoKind kind;
-    u32 generated_by_name; // Not used by TYPE_ARRAY
     bool is_resolved;
+    u32 generated_by_name; // Not used by TYPE_ARRAY
 } TypeInfo;
 
 typedef struct {
@@ -53,12 +53,13 @@ typedef struct {
     u32 member_offset;
     union {
         TypeInfo *type;
-        u32 type_name;
+        AstTypeInfo ati;
     };
 } TypeInfoStructMember;
 
 typedef struct {
     TypeInfo info;
+    u32 struct_id;
     u32 members_len;
     TypeInfoStructMember **members;
 } TypeInfoStruct;
@@ -104,6 +105,8 @@ struct symbol_table_t {
     u32 type_len;
     u32 type_cap;
 
+    u32 struct_count;
+
     HashMap map; // Key: string (u8 *), Value: *Symbol
     SymbolTable *parent; // @NULLABLE
 };
@@ -115,7 +118,6 @@ struct symbol_t {
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
     SymbolTable function_symtable; // Only used when node is AST_FUNC
 };
-
 
 
 void symbol_table_init(SymbolTable *table, HashMap *parent);
@@ -177,7 +179,7 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root);
  *
  *  2. [s32, bool], [{int, 32}, {bool}]
  *
- *  3. [s32, bool, Pair, foo, main], 
+ *  3. [s32, bool, Pair, foo, main],
  *     [{int, 32}, {bool}, {struct, [a: s32, b: bool]},
  *      {func, [a: s32, b: bool], Pair}, {func, [], s32}]
  *

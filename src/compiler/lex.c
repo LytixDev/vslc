@@ -178,7 +178,7 @@ void lex_init(Lexer *lexer, char *input)
         .pos_current = 0,
         .start = (Point){ 0 },
         .current = (Point){ 0 },
-        //.str_list = 
+        //.str_list =
         .n_errors = 0,
         .err_head = NULL,
         .err_tail = NULL,

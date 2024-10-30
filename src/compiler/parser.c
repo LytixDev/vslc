@@ -490,8 +490,7 @@ static AstFunc *parse_func(Parser *parser)
 
     AstTypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
-    AstFunc *func =
-        make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
+    AstFunc *func = make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
     return func;
 }
 
@@ -506,7 +505,7 @@ static AstRoot *parse_root(Parser *parser)
         switch (next.type) {
         case TOKEN_FUNC: {
             AstFunc *func = parse_func(parser);
-                AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
+            AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
             if (functions.head == NULL) {
                 functions.head = func_node;
                 functions.tail = functions.head;

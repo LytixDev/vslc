@@ -17,9 +17,9 @@
 #include <stdio.h>
 
 #include "compiler/ast.h"
+#include "compiler/compiler.h"
 #include "compiler/parser.h"
 #include "compiler/symbol.h"
-#include "compiler/compiler.h"
 
 #include "base/str.h"
 #define NICC_IMPLEMENTATION

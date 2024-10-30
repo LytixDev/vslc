@@ -18,8 +18,8 @@
 #define COMPILER_H
 
 #include "base/sac_single.h"
-#include "base/types.h"
 #include "base/str.h"
+#include "base/types.h"
 
 typedef struct {
     bool had_error;

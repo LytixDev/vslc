@@ -11,7 +11,7 @@ We can write functions that will be ran at compile-time. These functions will ta
                       ^   Run compile time function calls   v
                       ^   <---<---<---<---<---<---<---<---  v
 ```
-After typechecking, run all functions that are marked to be called at compile time. These functions may modify the AST. These means we may have new unresolved types, symbols and AST nodes. We may also have new function calls that should be ran at compile time. Therefore we must take the altered AST and go back to type & symbol generation. Once the AST reaches a steady-state, we can continue the compilation pipeline and eventually produce a native executable
+After typechecking, run all functions that are marked to be called at compile time. These functions may modify the AST. This means we may have new unresolved types, symbols and AST nodes. We may also have new function calls that should be ran at compile time. Therefore we must take the altered AST and go back to type & symbol generation. Once the AST reaches a steady-state, we can continue the compilation pipeline and eventually produce a native executable
 
 ### Why is this useful?
 Extremely powerful **Metaprogramming** with no preprocessor or a separate macro/meta language. Metaprogramming would be done in the same language as everything else.
