@@ -20,26 +20,12 @@
 #include <stdio.h>
 
 char *node_type_str_map[AST_NODE_TYPE_LEN] = {
-    "EXPR_UNARY",
-    "EXPR_BINARY",
-    "EXPR_LITERAL",
-    "EXPR_CALL",
+    "EXPR_UNARY",        "EXPR_BINARY", "EXPR_LITERAL", "EXPR_CALL",
 
-    "STMT_WHILE",
-    "STMT_IF",
-    "STMT_ABRUPT",
-    "STMT_ABRUPT_BREAK",
-    "STMT_ABRUPT_CONTINUE",
-    "STMT_BREAK_RETURN",
-    "STMT_PRINT",
-    "STMT_EXPR",
-    "STMT_BLOCK",
-    "STMT_ASSIGNMENT",
+    "STMT_WHILE",        "STMT_IF",     "STMT_ABRUPT",  "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
+    "STMT_BREAK_RETURN", "STMT_PRINT",  "STMT_EXPR",    "STMT_BLOCK",        "STMT_ASSIGNMENT",
 
-    "AST_FUNC",
-    "AST_LIST",
-    "AST_NODE_VAR_LIST",
-    "AST_ROOT",
+    "AST_FUNC",          "AST_STRUCT",  "AST_LIST",     "AST_NODE_VAR_LIST", "AST_ROOT",
 };
 
 /* Expressions */
@@ -132,15 +118,24 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 }
 
 /* Other nodes */
-AstFunction *make_function(Arena *arena, u32 identifier, TypedVarList parameters, AstStmt *body,
-                           TypeInfo return_type)
+AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
+                       AstTypeInfo return_type)
 {
-    AstFunction *func = m_arena_alloc(arena, sizeof(AstFunction));
+    AstFunc *func = m_arena_alloc(arena, sizeof(AstFunc));
     func->type = AST_FUNC;
-    func->identifier = identifier;
+    func->name = name;
     func->parameters = parameters;
     func->return_type = return_type;
     func->body = body;
+    return func;
+}
+
+AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members)
+{
+    AstStruct *func = m_arena_alloc(arena, sizeof(AstStruct));
+    func->type = AST_STRUCT;
+    func->name = name;
+    func->members = members;
     return func;
 }
 
@@ -156,9 +151,8 @@ AstList *make_list(Arena *arena, AstNode *head)
 {
     AstList *list = m_arena_alloc(arena, sizeof(AstList));
     list->type = AST_LIST;
-    AstListNode head_node = { .this = head, .next = NULL };
-    list->head = head_node;
-    list->tail = &list->head;
+    list->head = make_list_node(arena, head);
+    list->tail = list->head;
     return list;
 }
 
@@ -176,12 +170,13 @@ AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars)
     return node_var_list;
 }
 
-AstRoot *make_root(Arena *arena, AstList *declarations, AstList *functions)
+AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs)
 {
     AstRoot *root = m_arena_alloc(arena, sizeof(AstRoot));
     root->type = AST_ROOT;
     root->declarations = declarations;
     root->functions = functions;
+    root->structs = structs;
     return root;
 }
 
@@ -197,11 +192,11 @@ static void ast_print_typed_var_list(Str8 *str_list, TypedVarList vars)
 {
     for (u32 i = 0; i < vars.len; i++) {
         TypedVar var = vars.vars[i];
-        if (var.type_info.is_array) {
-            printf("%s: %s[%d]", str_list[var.identifier].str, str_list[var.type_info.name].str,
-                   var.type_info.elements);
+        if (var.ast_type_info.is_array) {
+            printf("%s: %s[%d]", str_list[var.name].str, str_list[var.ast_type_info.name].str,
+                   var.ast_type_info.elements);
         } else {
-            printf("%s: %s", str_list[var.identifier].str, str_list[var.type_info.name].str);
+            printf("%s: %s", str_list[var.name].str, str_list[var.ast_type_info.name].str);
         }
         if (i != vars.len - 1) {
             printf(", ");
@@ -318,23 +313,26 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
     switch (head->type) {
     case AST_ROOT: {
         AstRoot *root = AS_ROOT(head);
-        if (root->declarations != NULL) {
-            ast_print((AstNode *)root->declarations, str_list, indent + 1);
-        }
-        if (root->functions != NULL) {
-            ast_print((AstNode *)root->functions, str_list, indent + 1);
-        }
+        ast_print((AstNode *)(&root->declarations), str_list, indent + 1);
+        ast_print((AstNode *)(&root->functions), str_list, indent + 1);
+        ast_print((AstNode *)(&root->structs), str_list, indent + 1);
     }; break;
     case AST_FUNC: {
-        AstFunction *func = AS_FUNC(head);
-        printf("name=%s", str_list[func->identifier].str);
+        AstFunc *func = AS_FUNC(head);
+        printf("name=%s", str_list[func->name].str);
         printf(" parameters=");
         ast_print_typed_var_list(str_list, func->parameters);
         ast_print_stmt(func->body, str_list, indent + 1);
     }; break;
+    case AST_STRUCT: {
+        AstStruct *struct_decl = AS_STRUCT(head);
+        printf("name=%s", str_list[struct_decl->name].str);
+        printf(" members=");
+        ast_print_typed_var_list(str_list, struct_decl->members);
+    }; break;
     case AST_LIST: {
         AstList *list = AS_LIST(head);
-        for (AstListNode *node = &list->head; node != NULL; node = node->next) {
+        for (AstListNode *node = list->head; node != NULL; node = node->next) {
             ast_print(node->this, str_list, indent + 1);
         }
     }; break;

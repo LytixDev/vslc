@@ -25,8 +25,8 @@
 
 
 char *reserved_words[] = {
-    "func", "begin", "end",  "return", "print", "break", "continue",
-    "if",   "then",  "else", "while",  "do",    "var",
+    "func",     "struct", "begin", "end",  "return", "print", "break",
+    "continue", "if",     "then",  "else", "while",  "do",    "var",
 };
 
 
@@ -66,17 +66,6 @@ static void lex_error_append(Arena *arena, Lexer *lexer, char *msg)
     lexer->n_errors++;
 
     reset_token_ctx(lexer);
-}
-
-static u32 str_list_push(Lexer *lexer, Str8 str)
-{
-    if (lexer->str_list_len == lexer->str_list_cap) {
-        lexer->str_list_cap *= 2;
-        lexer->str_list = realloc(lexer->str_list, sizeof(Str8) * lexer->str_list_cap);
-    }
-    lexer->str_list[lexer->str_list_len] = str;
-    lexer->str_list_len++;
-    return lexer->str_list_len - 1;
 }
 
 static char next(Lexer *lexer)
@@ -158,10 +147,11 @@ static Token emit(Lexer *lexer, TokenType type)
     return token;
 }
 
-static Token emit_str(Lexer *lexer, StrBuilder *sb, TokenType type)
+static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenType type)
 {
     Token token = emit(lexer, type);
-    token.str_list_idx = str_list_push(lexer, sb->str);
+    Str8 final = str_builder_end(sb);
+    token.str_list_idx = str_list_push(&lexer->str_list, final);
     return token;
 }
 
@@ -188,14 +178,13 @@ void lex_init(Lexer *lexer, char *input)
         .pos_current = 0,
         .start = (Point){ 0 },
         .current = (Point){ 0 },
-        .str_list_len = 0,
-        .str_list_cap = 16,
+        //.str_list =
         .n_errors = 0,
         .err_head = NULL,
         .err_tail = NULL,
     };
 
-    lexer->str_list = malloc(sizeof(Str8) * lexer->str_list_cap);
+    str_list_init(&lexer->str_list);
 }
 
 Token lex_peek(Arena *arena, Lexer *lexer)
@@ -327,7 +316,7 @@ static Token lex_ident(Arena *arena, Lexer *lexer)
         }
     }
 
-    StrBuilder sb = make_str_builder(arena);
+    Str8Builder sb = make_str_builder(arena);
     str_builder_append_cstr(&sb, ident, ident_len);
     str_builder_append_u8(&sb, 0);
     return emit_str(lexer, &sb, TOKEN_IDENTIFIER);
@@ -344,7 +333,7 @@ static Token lex_str(Arena *arena, Lexer *lexer)
 {
     /* Came from '"' */
     bool had_error = false;
-    StrBuilder sb = make_str_builder(arena);
+    Str8Builder sb = make_str_builder(arena);
     char c;
     while ((c = next(lexer)) != '"') {
         if (c == EOF || c == '\n') {

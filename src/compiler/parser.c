@@ -178,16 +178,16 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
     return token;
 }
 
-static TypeInfo parse_type(Parser *parser, bool allow_array_types)
+static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
 {
     consume_or_err(parser, TOKEN_COLON, PET_CUSTOM);
     Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
     if (!match_token(parser, TOKEN_LBRACKET)) {
-        return (TypeInfo){ .name = name.str_list_idx, .is_array = false };
+        return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
     }
     if (!allow_array_types) {
         consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
-        return (TypeInfo){ .name = name.str_list_idx, .is_array = false };
+        return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
     }
 
     s32 elements = -1;
@@ -197,7 +197,7 @@ static TypeInfo parse_type(Parser *parser, bool allow_array_types)
         elements = peek.num_value;
     }
     consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
-    return (TypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
+    return (AstTypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
 }
 
 static AstExprCall *parse_call(Parser *parser, Token identifier)
@@ -450,8 +450,8 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
             indices_head = m_arena_alloc_struct(parser->arena, TypedVar);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
-        TypeInfo type_info = parse_type(parser, allow_array_types);
-        TypedVar new = { .identifier = identifier.str_list_idx, .type_info = type_info };
+        AstTypeInfo type_info = parse_type(parser, allow_array_types);
+        TypedVar new = { .name = identifier.str_list_idx, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
         typed_vars.len++;
@@ -475,7 +475,7 @@ static TypedVarList parse_local_decl_list(Parser *parser)
     return identifiers;
 }
 
-static AstFunction *parse_func(Parser *parser)
+static AstFunc *parse_func(Parser *parser)
 {
     /* Came from TOKEN_FUNC */
     // consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
@@ -488,39 +488,54 @@ static AstFunction *parse_func(Parser *parser)
     }
     consume_or_err(parser, TOKEN_RPAREN, PET_CUSTOM);
 
-    TypeInfo return_type = parse_type(parser, true);
+    AstTypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
-    AstFunction *func =
-        make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
+    AstFunc *func = make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
     return func;
 }
 
 static AstRoot *parse_root(Parser *parser)
 {
-    AstList *functions = NULL;
-    AstList *declarations = NULL;
+    AstList declarations = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList functions = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList structs = { .type = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
     while ((next = next_token(parser)).type != TOKEN_EOF) {
         switch (next.type) {
         case TOKEN_FUNC: {
-            AstFunction *func = parse_func(parser);
-            if (functions == NULL) {
-                functions = make_list(parser->arena, (AstNode *)func);
+            AstFunc *func = parse_func(parser);
+            AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
+            if (functions.head == NULL) {
+                functions.head = func_node;
+                functions.tail = functions.head;
             } else {
-                AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
-                ast_list_push_back(functions, func_node);
+                ast_list_push_back(&functions, func_node);
             }
         }; break;
         case TOKEN_VAR: {
             /* Parse global declarations list */
             TypedVarList vars = parse_variable_list(parser, true);
             AstNodeVarList *node_vars = make_node_var_list(parser->arena, vars);
-            if (declarations == NULL) {
-                declarations = make_list(parser->arena, (AstNode *)node_vars);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
+            if (declarations.head == NULL) {
+                declarations.head = node_node;
+                declarations.tail = declarations.head;
             } else {
-                AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
-                ast_list_push_back(declarations, node_node);
+                ast_list_push_back(&declarations, node_node);
+            }
+        }; break;
+        case TOKEN_STRUCT: {
+            Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+            consume_or_err(parser, TOKEN_ASSIGNMENT, PET_CUSTOM);
+            TypedVarList members = parse_variable_list(parser, true);
+            AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
+            if (structs.head == NULL) {
+                structs.head = node_node;
+                structs.tail = structs.head;
+            } else {
+                ast_list_push_back(&structs, node_node);
             }
         }; break;
         default: {
@@ -530,7 +545,7 @@ static AstRoot *parse_root(Parser *parser)
         }
     }
 
-    return make_root(parser->arena, declarations, functions);
+    return make_root(parser->arena, declarations, functions, structs);
 }
 
 
@@ -545,13 +560,11 @@ ParseResult parse(Arena *arena, Arena *lex_arena, char *input)
     };
     lex_init(&parser.lexer, input);
 
-    // AstNode *head = (AstNode *)parse_func(&parser);
     AstRoot *head = parse_root(&parser);
     return (ParseResult){
         .n_errors = parser.n_errors,
         .err_head = parser.err_head,
         .head = head,
         .str_list = parser.lexer.str_list,
-        .str_list_len = parser.lexer.str_list_len,
     };
 }
