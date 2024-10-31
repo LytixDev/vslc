@@ -19,7 +19,7 @@
 #include "compiler/compiler.h"
 #include "compiler/error.h"
 #include "compiler/parser.h"
-#include "compiler/symbol.h"
+#include "compiler/type.h"
 
 #include "base/str.h"
 #define NICC_IMPLEMENTATION
@@ -41,17 +41,16 @@ u32 parser(char *input)
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
         printf("%s\n", err->msg.str);
     }
-
-    if (e.n_errors == 0) {
-        ast_print((AstNode *)res.head, res.str_list.strs, 0);
-        printf("\n");
-    } else {
+    if (e.n_errors != 0) {
         goto done;
     }
 
     error_handler_reset(&e);
     Compiler compiler = { .persist_arena = &arena, .str_list = res.str_list, .e = &e };
     symbol_generate(&compiler, res.head);
+    for (CompilerError *err = e.head; err != NULL; err = err->next) {
+        printf("%s\n", err->msg.str);
+    }
 
 done:
     error_handler_release(&e);

@@ -14,12 +14,13 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef SYMBOL_H
-#define SYMBOL_H
+#ifndef TYPE_H
+#define TYPE_H
 
 #include "ast.h"
 #include "base/nicc.h"
-#include "compiler.h"
+
+typedef struct compiler_t Compiler; // forward decl from compiler.h
 
 typedef enum {
     TYPE_INTEGER = 0,
@@ -59,7 +60,7 @@ typedef struct {
 
 typedef struct {
     TypeInfo info;
-    u32 struct_id;
+    u32 struct_id; // Useful for graph algorithms
     u32 members_len;
     TypeInfoStructMember **members;
 } TypeInfoStruct;
@@ -120,9 +121,9 @@ struct symbol_t {
 };
 
 
-void symbol_table_init(SymbolTable *table, HashMap *parent);
+// void symbol_table_init(SymbolTable *table, HashMap *parent);
 
-SymbolTable symbol_generate(Compiler *compiler, AstRoot *root);
+void symbol_generate(Compiler *compiler, AstRoot *root);
 
 
 /*
@@ -193,4 +194,4 @@ Statically check:
 >do not attempt to use variable or call func which does not exist
 >do not have two funcs or two vars in the same scope with same name
  */
-#endif /* SYMBOL_H */
+#endif /* TYPE_H */

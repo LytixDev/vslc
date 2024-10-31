@@ -14,13 +14,14 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "symbol.h"
+#include "type.h"
+#include "ast.h"
 #include "base/base.h"
 #include "base/nicc.h"
 #include "base/sac_single.h"
 #include "base/str.h"
 #include "compiler.h"
-#include "compiler/ast.h"
+#include "error.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -62,22 +63,37 @@ static SymbolTable make_symt(SymbolTable *parent)
     SymbolTable symt = { .sym_len = 0,
                          .sym_cap = 16,
                          .type_len = 0,
-                         .type_cap = 16,
+                         .type_cap = 0, // Only the root symbol table can generate types
                          .struct_count = 0,
                          .parent = parent };
+
+    /* More sensible defautls for the root symbol table */
+    if (parent == NULL) {
+        symt.sym_cap = 64;
+        symt.type_cap = 64;
+    }
     symt.symbols = malloc(sizeof(Symbol *) * symt.sym_cap);
     symt.types = malloc(sizeof(TypeInfo *) * symt.type_cap);
     hashmap_init(&symt.map);
     return symt;
 }
 
-static Symbol *symt_new_sym(Arena *arena, Str8List str_list, SymbolTable *symt, SymbolKind kind,
-                            u32 name, TypeInfo *type_info, AstNode *node)
+static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind kind, u32 name,
+                            TypeInfo *type_info, AstNode *node)
 {
     // TODO: check if symbol already exists
     // TODO: A local symbol is not allowed to exist as a global func or type
     // if type == SYMBOL_LOCAL_VAR, traverse parents of hasmaps and ensure no exists
-    Symbol *sym = m_arena_alloc(arena, sizeof(Symbol));
+    Str8 sym_name = compiler->str_list.strs[name];
+    Symbol *sym_existing = hashmap_get(&symt->map, sym_name.str, sym_name.len);
+    if (sym_existing != NULL) {
+        error_sym(compiler->e, "Symbol already exists", sym_name);
+        /* We will continue with the OG symbol, but will stop compilation later */
+        return sym_existing;
+    }
+
+    /* Create the new symbol */
+    Symbol *sym = m_arena_alloc(compiler->persist_arena, sizeof(Symbol));
     sym->kind = kind;
     sym->name = name;
     sym->type_info = type_info;
@@ -86,7 +102,7 @@ static Symbol *symt_new_sym(Arena *arena, Str8List str_list, SymbolTable *symt, 
         sym->function_symtable = make_symt(symt);
     }
 
-    // Ensure space for Symbol
+    /* Ensure space in the symbol table and add the new symbol */
     if (symt->sym_len >= symt->sym_cap) {
         symt->sym_cap *= 2;
         symt->symbols = realloc(symt->symbols, sizeof(Symbol *) * symt->sym_cap);
@@ -94,13 +110,12 @@ static Symbol *symt_new_sym(Arena *arena, Str8List str_list, SymbolTable *symt, 
     symt->symbols[symt->sym_len] = sym;
     symt->sym_len++;
 
+    /* If symbol generated a type, ensure space in type table and add new type */
     if (type_info != NULL) {
         if (type_info->kind == TYPE_STRUCT) {
             ((TypeInfoStruct *)type_info)->struct_id = symt->struct_count;
             symt->struct_count++;
         }
-
-        // Ensure space for Type
         if (symt->type_len >= symt->type_cap) {
             symt->type_cap *= 2;
             symt->types = realloc(symt->types, sizeof(TypeInfo *) * symt->type_cap);
@@ -109,9 +124,7 @@ static Symbol *symt_new_sym(Arena *arena, Str8List str_list, SymbolTable *symt, 
         symt->type_len++;
     }
 
-    Str8 sym_name = str_list.strs[name];
     hashmap_put(&symt->map, sym_name.str, sym_name.len, sym, sizeof(Symbol *), false);
-
     return sym;
 }
 
@@ -126,17 +139,18 @@ static Symbol *symt_find_sym(SymbolTable *symt, Str8 key)
     return sym;
 }
 
-static TypeInfo *ast_type_resolve(Arena *arena, SymbolTable *symt, Str8List str_list,
-                                  AstTypeInfo ati)
+static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati)
 {
-    Str8 key = str_list.strs[ati.name];
-    Symbol *sym = symt_find_sym(symt, key);
+    // NOTE: This function uses the root symbol table. Okay as of now since we don't allow
+    //       declarations that generate types that aren't global.
+    Str8 key = compiler->str_list.strs[ati.name];
+    Symbol *sym = symt_find_sym(&compiler->symt_root, key);
     if (sym == NULL) {
-        // printf("LOG: Type not found\n");
         return NULL;
     }
     if (sym->kind != SYMBOL_TYPE) {
-        printf("ERR: Expected symbol to be type, but found X\n");
+        Str8 sym_name = compiler->str_list.strs[sym->name];
+        error_sym(compiler->e, "Wants to be used as a type, but is in fact not :-(", sym_name);
         return NULL;
     }
     assert(sym->type_info != NULL);
@@ -144,7 +158,7 @@ static TypeInfo *ast_type_resolve(Arena *arena, SymbolTable *symt, Str8List str_
         return sym->type_info;
     }
 
-    TypeInfoArray *t = make_type_info(arena, TYPE_ARRAY, 0);
+    TypeInfoArray *t = make_type_info(compiler->persist_arena, TYPE_ARRAY, 0);
     t->elements = ati.elements;
     t->element_type = sym->type_info;
     t->info.is_resolved = true;
@@ -152,65 +166,63 @@ static TypeInfo *ast_type_resolve(Arena *arena, SymbolTable *symt, Str8List str_
 }
 
 
-static TypeInfoStruct *struct_decl_to_type(Arena *arena, Str8List str_list, SymbolTable *symt,
-                                           AstStruct *decl)
+static TypeInfoStruct *struct_decl_to_type(Compiler *compiler, AstStruct *decl)
 {
-    TypeInfoStruct *type_info = make_type_info(arena, TYPE_STRUCT, decl->name);
-    type_info->members = m_arena_alloc(arena, sizeof(TypeInfoStructMember *) * decl->members.len);
-    type_info->members_len = decl->members.len;
-    type_info->info.is_resolved = true;
+    Arena *arena = compiler->persist_arena;
+    TypeInfoStruct *t = make_type_info(arena, TYPE_STRUCT, decl->name);
+    t->members = m_arena_alloc(arena, sizeof(TypeInfoStructMember *) * decl->members.len);
+    t->members_len = decl->members.len;
+    t->info.is_resolved = true;
+
     for (u32 i = 0; i < decl->members.len; i++) {
         TypedVar tv = decl->members.vars[i];
         TypeInfoStructMember *member = m_arena_alloc(arena, sizeof(TypeInfoStructMember));
-        type_info->members[i] = member;
+        t->members[i] = member;
         member->is_resolved = false;
         member->name = tv.name;
         member->ati = tv.ast_type_info;
 
-        TypeInfo *t = ast_type_resolve(arena, symt, str_list, tv.ast_type_info);
-        if (t != NULL) {
+        TypeInfo *member_t = ast_type_resolve(compiler, tv.ast_type_info);
+        if (member_t != NULL) {
             member->is_resolved = true;
-            member->type = t;
+            member->type = member_t;
         }
     }
 
-    for (u32 i = 0; i < type_info->members_len; i++) {
-        if (!type_info->members[i]->is_resolved) {
-            type_info->info.is_resolved = false;
+    for (u32 i = 0; i < t->members_len; i++) {
+        if (!t->members[i]->is_resolved) {
+            t->info.is_resolved = false;
             break;
         }
     }
-    return type_info;
+    return t;
 }
 
-static TypeInfoFunc *func_decl_to_type(Arena *arena, Str8List str_list, SymbolTable *symt,
-                                       AstFunc *decl)
+static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
 {
-    TypeInfoFunc *type_info = make_type_info(arena, TYPE_FUNC, decl->name);
-    type_info->n_params = decl->parameters.len;
-    type_info->param_names = m_arena_alloc(arena, sizeof(u32) * type_info->n_params);
-    type_info->param_types = m_arena_alloc(arena, sizeof(TypeInfo *) * type_info->n_params);
-    type_info->info.is_resolved = true;
+    TypeInfoFunc *t = make_type_info(compiler->persist_arena, TYPE_FUNC, decl->name);
+    t->n_params = decl->parameters.len;
+    t->param_names = m_arena_alloc(compiler->persist_arena, sizeof(u32) * t->n_params);
+    t->param_types = m_arena_alloc(compiler->persist_arena, sizeof(TypeInfo *) * t->n_params);
+    t->info.is_resolved = true;
 
-    TypeInfo *return_type = ast_type_resolve(arena, symt, str_list, decl->return_type);
-    type_info->return_type = return_type;
+    TypeInfo *return_type = ast_type_resolve(compiler, decl->return_type);
+    t->return_type = return_type;
     if (return_type == NULL) {
-        type_info->info.is_resolved = false;
+        t->info.is_resolved = false;
     }
 
     for (u32 i = 0; i < decl->parameters.len; i++) {
         TypedVar tv = decl->parameters.vars[i];
-        type_info->param_names[i] = tv.name;
-        // type_info->param_types[i] = NULL;
-
-        TypeInfo *t = ast_type_resolve(arena, symt, str_list, tv.ast_type_info);
-        if (t == NULL) {
-            type_info->info.is_resolved = false;
+        t->param_names[i] = tv.name;
+        TypeInfo *param_t = ast_type_resolve(compiler, tv.ast_type_info);
+        if (param_t == NULL) {
+            t->info.is_resolved = false;
         }
-        type_info->param_types[i] = t;
+        t->param_types[i] = param_t;
     }
 
-    return type_info;
+    return t;
 }
 
 /* --- PRINT --- */
@@ -270,6 +282,7 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
     }
 }
 
+
 /* --- Graph --- */
 typedef struct graph_node_t GraphNode;
 struct graph_node_t {
@@ -288,14 +301,11 @@ static Graph make_graph(Arena *arena, u32 n_nodes)
     Graph graph = { .n_nodes = n_nodes,
                     .neighbor_list = m_arena_alloc(arena, sizeof(GraphNode *) * n_nodes) };
 
-    // TODO: memset
-    for (u32 i = 0; i < n_nodes; i++) {
-        graph.neighbor_list[i] = NULL;
-    }
-
+    memset(graph.neighbor_list, 0, sizeof(GraphNode) * graph.n_nodes);
     return graph;
 }
 
+/*
 static void graph_print(Graph *graph)
 {
     for (u32 i = 0; i < graph->n_nodes; i++) {
@@ -308,6 +318,7 @@ static void graph_print(Graph *graph)
         putchar('\n');
     }
 }
+*/
 
 static void graph_add_edge(Arena *arena, Graph *graph, u32 from, u32 to)
 {
@@ -319,10 +330,11 @@ static void graph_add_edge(Arena *arena, Graph *graph, u32 from, u32 to)
     graph->neighbor_list[from] = new_node;
 }
 
-static void graph_add_struct_edges(Arena *arena, Graph *graph, TypeInfoStruct *t)
+static void graph_add_edges_from_struct_type(Arena *arena, Graph *graph, TypeInfoStruct *t)
 {
     u32 *added_list = m_arena_alloc_zero(arena, sizeof(u32) * t->members_len);
     u32 added_count = 0;
+
     for (u32 i = 0; i < t->members_len; i++) {
         TypeInfoStructMember *m = t->members[i];
         /* Only care about struct and array types */
@@ -341,28 +353,28 @@ static void graph_add_struct_edges(Arena *arena, Graph *graph, TypeInfoStruct *t
         u32 from = t->struct_id;
         u32 to = member_type->struct_id;
 
-        // Only add new edges
-        bool skip_add = false;
+        /* Do not add duplicate edges */
+        bool duplicate = false;
         for (u32 j = 0; j < added_count; j++) {
             if (added_list[j] == to) {
-                skip_add = true;
+                duplicate = true;
                 break;
             }
         }
-        if (!skip_add) {
+        if (!duplicate) {
             graph_add_edge(arena, graph, from, to);
             added_list[added_count++] = to;
         }
     }
 }
 
-static bool find_cycles(Arena *arena, Graph *graph)
+static bool find_cycles(Compiler *compiler, Arena *graph_arena, Graph *graph)
 {
     // TODO: Trajan's algorithm would be better
     // TODO: return what caused the cycle so we can create an error message
 
     /* DFS-based cycle detector */
-    u32 *visited = m_arena_alloc(arena, sizeof(u32) * graph->n_nodes);
+    u32 *visited = m_arena_alloc(graph_arena, sizeof(u32) * graph->n_nodes);
     memset(visited, false, sizeof(u32) * graph->n_nodes);
     u32 stack[1024]; // TODO: not-fixed width
     u32 recursion_stack[1024]; // TODO: not-fixed width
@@ -382,6 +394,13 @@ static bool find_cycles(Arena *arena, Graph *graph)
             /* if node in recursion_stack then we have a cycle */
             for (u32 i = 0; i < recursion_idx; i++) {
                 if (recursion_stack[i] == current_node) {
+                    // TODO: We can backtrace the steps to give a really good error message, but
+                    //       right now I just do the bare minimum.
+                    Str8Builder sb = make_str_builder(&compiler->e->arena);
+                    str_builder_sprintf(&sb, "A type cycle detected in struct with id %d", 1,
+                                        (int)current_node);
+                    Str8 msg = str_builder_end(&sb);
+                    error_msg_str8(compiler->e, msg);
                     return true;
                 }
             }
@@ -407,42 +426,43 @@ static bool find_cycles(Arena *arena, Graph *graph)
     return false;
 }
 
-
-SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
+static void fill_builtin_types(Compiler *compiler)
 {
-    SymbolTable symt_root = make_symt(NULL);
+    /* s32 */
+    u32 name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "s32");
+    TypeInfoInteger *s32_builtin = make_type_info(compiler->persist_arena, TYPE_INTEGER, name);
+    s32_builtin->info.is_resolved = true;
+    s32_builtin->size = 32;
+    s32_builtin->is_signed = true;
+    symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, name, (TypeInfo *)s32_builtin, NULL);
+
+    /* bool */
+    name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "bool");
+    TypeInfoBool *bool_builtin = make_type_info(compiler->persist_arena, TYPE_BOOL, name);
+    bool_builtin->info.is_resolved = true;
+    symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, name, (TypeInfo *)bool_builtin, NULL);
+}
+
+
+void symbol_generate(Compiler *compiler, AstRoot *root)
+{
+    compiler->symt_root = make_symt(NULL);
 
     /* Fill symbol table with builtin types */
-    {
-        u32 name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "s32");
-        TypeInfoInteger *s32_builtin = make_type_info(compiler->persist_arena, TYPE_INTEGER, name);
-        s32_builtin->info.is_resolved = true;
-        s32_builtin->size = 32;
-        s32_builtin->is_signed = true;
-        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_TYPE, name,
-                     (TypeInfo *)s32_builtin, NULL);
+    fill_builtin_types(compiler);
 
-        name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "bool");
-        TypeInfoBool *bool_builtin = make_type_info(compiler->persist_arena, TYPE_BOOL, name);
-        bool_builtin->info.is_resolved = true;
-        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_TYPE, name,
-                     (TypeInfo *)bool_builtin, NULL);
-    }
-
-    /* Find global symbols */
+    /* Create symbols and types for global declarations */
     for (AstListNode *node = root->structs.head; node != NULL; node = node->next) {
         AstStruct *struct_decl = AS_STRUCT(node->this);
-        TypeInfoStruct *t = struct_decl_to_type(compiler->persist_arena, compiler->str_list,
-                                                &symt_root, struct_decl);
-        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_TYPE,
-                     struct_decl->name, (TypeInfo *)t, node->this);
+        TypeInfoStruct *t = struct_decl_to_type(compiler, struct_decl);
+        symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, struct_decl->name, (TypeInfo *)t,
+                     node->this);
     }
     for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
         AstFunc *func_decl = AS_FUNC(node->this);
-        TypeInfoFunc *t =
-            func_decl_to_type(compiler->persist_arena, compiler->str_list, &symt_root, func_decl);
-        symt_new_sym(compiler->persist_arena, compiler->str_list, &symt_root, SYMBOL_FUNC,
-                     func_decl->name, (TypeInfo *)t, node->this);
+        TypeInfoFunc *t = func_decl_to_type(compiler, func_decl);
+        symt_new_sym(compiler, &compiler->symt_root, SYMBOL_FUNC, func_decl->name, (TypeInfo *)t,
+                     node->this);
     }
     /*
     for (AstListNode *node = root->declarations.head; node != NULL; node = node->next) {
@@ -455,13 +475,18 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
     */
 
     /* Resolve all unsresolved types */
-    for (u32 i = 0; i < symt_root.type_len; i++) {
-        TypeInfo *t = symt_root.types[i];
+    for (u32 i = 0; i < compiler->symt_root.type_len; i++) {
+        TypeInfo *t = compiler->symt_root.types[i];
         if (t->is_resolved) {
             continue;
         }
+        /*
+         * Right now, everything other than struct member will be wholly resolved if the type it
+         * references exists.
+         */
         if (t->kind != TYPE_STRUCT) {
-            printf("ERR: Some type here is unknown ...\n");
+            Str8 type_name = compiler->str_list.strs[t->generated_by_name];
+            error_sym(compiler->e, "A type used here is not declared", type_name);
             continue;
         }
 
@@ -472,10 +497,10 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
             if (m->is_resolved) {
                 continue;
             }
-            TypeInfo *m_t =
-                ast_type_resolve(compiler->persist_arena, &symt_root, compiler->str_list, m->ati);
+            TypeInfo *m_t = ast_type_resolve(compiler, m->ati);
             if (m_t == NULL) {
-                printf("ERR: Struct member type is unknown ...\n");
+                Str8 type_name = compiler->str_list.strs[m->ati.name];
+                error_sym(compiler->e, "Type of struct member is never declared", type_name);
                 t_struct->info.is_resolved = false;
                 continue;
             }
@@ -483,30 +508,31 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
             m->is_resolved = true;
         }
     }
+    /* Early return if any types are unresolved */
+    if (compiler->e->n_errors != 0) {
+        return;
+    }
 
     /* Check for cirular type dependencies */
     ArenaTmp tmp = m_arena_tmp_init(compiler->persist_arena);
-    Graph graph = make_graph(tmp.arena, symt_root.struct_count);
-    for (u32 i = 0; i < symt_root.type_len; i++) {
-        TypeInfo *t = symt_root.types[i];
+    Graph graph = make_graph(tmp.arena, compiler->symt_root.struct_count);
+    for (u32 i = 0; i < compiler->symt_root.type_len; i++) {
+        TypeInfo *t = compiler->symt_root.types[i];
         if (t->kind == TYPE_STRUCT) {
-            graph_add_struct_edges(tmp.arena, &graph, (TypeInfoStruct *)t);
-        } else if (t->kind == TYPE_ARRAY) {
-            // TypeInfoArray *ta = (TypeInfoArray *)t;
-            // graph_add_struct_edges(tmp.arena, &graph, (TypeInfoStruct *)ta->element_type);
+            graph_add_edges_from_struct_type(tmp.arena, &graph, (TypeInfoStruct *)t);
         }
     }
 
-    bool found_cycle = find_cycles(tmp.arena, &graph);
-    if (found_cycle) {
-        printf("Error: Cycle detecetd struct types \n");
-    }
+    find_cycles(compiler, tmp.arena, &graph);
     m_arena_tmp_release(tmp);
-
+    /* If any cycles were found, early return */
+    if (compiler->e->n_errors != 0) {
+        return;
+    }
 
     // Print symbols
-    for (u32 i = 0; i < symt_root.sym_len; i++) {
-        Symbol *sym = symt_root.symbols[i];
+    for (u32 i = 0; i < compiler->symt_root.sym_len; i++) {
+        Symbol *sym = compiler->symt_root.symbols[i];
         printf("%s", compiler->str_list.strs[sym->name].str);
         if (sym->type_info == NULL) {
             putchar('\n');
@@ -518,7 +544,4 @@ SymbolTable symbol_generate(Compiler *compiler, AstRoot *root)
         type_info_print(compiler->str_list, sym->type_info);
         putchar('\n');
     }
-
-
-    return (SymbolTable){ 0 };
 }

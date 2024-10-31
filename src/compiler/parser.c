@@ -129,7 +129,7 @@ static Token consume_or_err(Parser *parser, TokenType expected, char *msg)
     Token token = peek_token(parser);
     if (token.type != expected) {
         // next_token(parser);
-        error_parse_append(parser->lexer.e, msg, token);
+        error_parse(parser->lexer.e, msg, token);
         return (Token){ .type = TOKEN_ERR };
     }
     next_token(parser);
@@ -247,7 +247,7 @@ static AstExprBinary *parse_relation(Parser *parser)
     AstExpr *left = parse_expr(parser, 0);
     Token op = peek_token(parser);
     if (!is_relation_op(op)) {
-        error_parse_append(parser->lexer.e, "Expected a relation operator", op);
+        error_parse(parser->lexer.e, "Expected a relation operator", op);
     } else {
         next_token(parser);
     }
@@ -323,7 +323,7 @@ static AstStmtBlock *parse_block(Parser *parser)
     Token next;
     while ((next = peek_token(parser)).type != TOKEN_END) {
         if (next.type == TOKEN_EOF) {
-            error_parse_append(parser->lexer.e, "Found EOF inside a block. Expected END", next);
+            error_parse(parser->lexer.e, "Found EOF inside a block. Expected END", next);
             break;
         }
         AstStmt *stmt = parse_stmt(parser);
@@ -374,7 +374,7 @@ static AstStmt *parse_stmt(Parser *parser)
         }
 
         if (next.type != TOKEN_ASSIGNMENT) {
-            error_parse_append(parser->lexer.e, "Expected assignment", next);
+            error_parse(parser->lexer.e, "Expected assignment", next);
             return NULL;
         }
 
@@ -388,7 +388,7 @@ static AstStmt *parse_stmt(Parser *parser)
     case TOKEN_BEGIN:
         return (AstStmt *)parse_block(parser);
     default:
-        error_parse_append(parser->lexer.e, "Illegal first token in statement", token);
+        error_parse(parser->lexer.e, "Illegal first token in statement", token);
         return NULL;
     }
 }
@@ -497,8 +497,7 @@ static AstRoot *parse_root(Parser *parser)
             }
         }; break;
         default: {
-            error_parse_append(parser->lexer.e, "Illegal first token. Expected var, struct or func",
-                               next);
+            error_parse(parser->lexer.e, "Illegal first token. Expected var, struct or func", next);
             break;
         };
         }

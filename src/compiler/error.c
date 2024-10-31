@@ -60,7 +60,12 @@ static void append_err(ErrorHandler *e, Str8 msg)
     e->n_errors += 1;
 }
 
-void error_lex_append(ErrorHandler *e, char *msg, Point start, Point end)
+void error_msg_str8(ErrorHandler *e, Str8 msg)
+{
+    append_err(e, msg);
+}
+
+void error_lex(ErrorHandler *e, char *msg, Point start, Point end)
 {
     Str8Builder sb = make_str_builder(&e->arena);
     str_builder_sprintf(&sb, "[%s:%d] ", 2, e->file_name, end.l);
@@ -69,10 +74,33 @@ void error_lex_append(ErrorHandler *e, char *msg, Point start, Point end)
     append_err(e, str);
 }
 
-void error_parse_append(ErrorHandler *e, char *msg, Token guilty)
+void error_parse(ErrorHandler *e, char *msg, Token guilty)
 {
     Str8Builder sb = make_str_builder(&e->arena);
     str_builder_sprintf(&sb, "[%s:%d] ", 2, e->file_name, guilty.end);
+    str_builder_append_cstr(&sb, msg, strlen(msg));
+    Str8 str = str_builder_end(&sb);
+    append_err(e, str);
+}
+
+
+void error_node(ErrorHandler *e, char *msg, AstNode *guilty)
+{
+    Str8Builder sb = make_str_builder(&e->arena);
+    str_builder_sprintf(&sb, "[%s:%d] ", 2, e->file_name, -1);
+    str_builder_append_cstr(&sb, msg, strlen(msg));
+    Str8 str = str_builder_end(&sb);
+    append_err(e, str);
+}
+
+void error_sym(ErrorHandler *e, char *msg, Str8 name)
+{
+    // TODO: print occurence of this type
+    Str8Builder sb = make_str_builder(&e->arena);
+    str_builder_sprintf(&sb, "[%s:%d] ", 2, e->file_name, -1);
+    str_builder_append_cstr(&sb, (char *)name.str, name.len);
+    str_builder_append_u8(&sb, ':');
+    str_builder_append_u8(&sb, ' ');
     str_builder_append_cstr(&sb, msg, strlen(msg));
     Str8 str = str_builder_end(&sb);
     append_err(e, str);

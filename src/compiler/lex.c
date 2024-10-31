@@ -42,33 +42,6 @@ static void reset_token_ctx(Lexer *lexer)
     lexer->start = lexer->current;
 }
 
-// static LexError *make_lex_error(Arena *arena, Lexer *lexer, char *msg)
-// {
-//     LexError *lex_error = m_arena_alloc(arena, sizeof(LexError));
-//     size_t msg_len = strlen(msg) + 1; // TODO: avoid strlen?
-//     lex_error->msg = m_arena_alloc(arena, msg_len);
-//     memcpy(lex_error->msg, msg, msg_len);
-//     lex_error->start = lexer->start;
-//     lex_error->point_of_failure = lexer->current;
-//     lex_error->next = NULL;
-//     return lex_error;
-// }
-//
-// static void lex_error_append(Arena *arena, Lexer *lexer, char *msg)
-// {
-//     LexError *lex_error = make_lex_error(arena, lexer, msg);
-//     if (lexer->err_head == NULL) {
-//         lexer->err_head = lex_error;
-//     } else {
-//         lexer->err_tail->next = lex_error;
-//     }
-//     lexer->err_tail = lex_error;
-//
-//     lexer->n_errors++;
-//
-//     reset_token_ctx(lexer);
-// }
-
 static char next(Lexer *lexer)
 {
     char c = lexer->input[lexer->pos_current];
@@ -201,82 +174,80 @@ Token lex_next(Arena *arena, Lexer *lexer)
         lexer->has_next = false;
         return lexer->next;
     }
-    while (1) {
-        char c = next(lexer);
-        switch (c) {
-        case EOF:
-            return (Token){ .type = TOKEN_EOF };
 
-        /* Whitespace */
-        case ' ':
-        case '\n':
-        case '\t':
-        case '\r':
-        case '\v':
-            reset_token_ctx(lexer);
-            break;
+    char c = next(lexer);
+    switch (c) {
+    case EOF:
+        return (Token){ .type = TOKEN_EOF };
 
-        /* Comments or slash (divide) */
-        case '/': {
-            if (match(lexer, '/')) {
-                return lex_comment(arena, lexer);
-            }
-            return emit(lexer, TOKEN_SLASH);
-            break;
-        };
+    /* Whitespace */
+    case ' ':
+    case '\n':
+    case '\t':
+    case '\r':
+    case '\v':
+        reset_token_ctx(lexer);
+        return lex_next(arena, lexer);
 
-        /* Strings */
-        case '"':
-            return lex_str(arena, lexer);
-
-        /* Single-character tokens */
-        case '+':
-            return emit(lexer, TOKEN_PLUS);
-        case '-':
-            return emit(lexer, TOKEN_MINUS);
-        case '*':
-            return emit(lexer, TOKEN_STAR);
-        case '(':
-            return emit(lexer, TOKEN_LPAREN);
-        case ')':
-            return emit(lexer, TOKEN_RPAREN);
-        case '[':
-            return emit(lexer, TOKEN_LBRACKET);
-        case ']':
-            return emit(lexer, TOKEN_RBRACKET);
-        case '=':
-            return emit(lexer, TOKEN_EQ);
-        case ',':
-            return emit(lexer, TOKEN_COMMA);
-
-        /* Single- or two-character tokens */
-        case '<':
-            return match(lexer, '<') ? emit(lexer, TOKEN_LSHIFT) : emit(lexer, TOKEN_LESS);
-        case '>':
-            return match(lexer, '>') ? emit(lexer, TOKEN_RSHIFT) : emit(lexer, TOKEN_GREATER);
-        case ':':
-            return match(lexer, '=') ? emit(lexer, TOKEN_ASSIGNMENT) : emit(lexer, TOKEN_COLON);
-        case '!': {
-            if (match(lexer, '=')) {
-                return emit(lexer, TOKEN_NEQ);
-            } else {
-                error_lex_append(lexer->e, "Expected '=' afer '!'", lexer->start, lexer->current);
-                return (Token){ .type = TOKEN_ERR };
-            }
-        };
-
-        default: {
-            if (is_numeric(c)) {
-                return lex_num(lexer);
-            }
-            if (!(is_alpha(c))) {
-                error_lex_append(lexer->e, "Unrecognized character", lexer->start, lexer->current);
-                return (Token){ .type = TOKEN_ERR };
-            }
-            /* Reserved words and identifiers */
-            return lex_ident(arena, lexer);
+    /* Comments or slash (divide) */
+    case '/': {
+        if (match(lexer, '/')) {
+            return lex_comment(arena, lexer);
         }
+        return emit(lexer, TOKEN_SLASH);
+    };
+
+    /* Strings */
+    case '"':
+        return lex_str(arena, lexer);
+
+    /* Single-character tokens */
+    case '+':
+        return emit(lexer, TOKEN_PLUS);
+    case '-':
+        return emit(lexer, TOKEN_MINUS);
+    case '*':
+        return emit(lexer, TOKEN_STAR);
+    case '(':
+        return emit(lexer, TOKEN_LPAREN);
+    case ')':
+        return emit(lexer, TOKEN_RPAREN);
+    case '[':
+        return emit(lexer, TOKEN_LBRACKET);
+    case ']':
+        return emit(lexer, TOKEN_RBRACKET);
+    case '=':
+        return emit(lexer, TOKEN_EQ);
+    case ',':
+        return emit(lexer, TOKEN_COMMA);
+
+    /* Single- or two-character tokens */
+    case '<':
+        return match(lexer, '<') ? emit(lexer, TOKEN_LSHIFT) : emit(lexer, TOKEN_LESS);
+    case '>':
+        return match(lexer, '>') ? emit(lexer, TOKEN_RSHIFT) : emit(lexer, TOKEN_GREATER);
+    case ':':
+        return match(lexer, '=') ? emit(lexer, TOKEN_ASSIGNMENT) : emit(lexer, TOKEN_COLON);
+    case '!': {
+        if (match(lexer, '=')) {
+            return emit(lexer, TOKEN_NEQ);
+        } else {
+            error_lex(lexer->e, "Expected '=' afer '!'", lexer->start, lexer->current);
+            return (Token){ .type = TOKEN_ERR };
         }
+    };
+
+    default: {
+        if (is_numeric(c)) {
+            return lex_num(lexer);
+        }
+        if (!(is_alpha(c))) {
+            error_lex(lexer->e, "Unrecognized character", lexer->start, lexer->current);
+            return (Token){ .type = TOKEN_ERR };
+        }
+        /* Reserved words and identifiers */
+        return lex_ident(arena, lexer);
+    }
     }
 }
 
@@ -335,14 +306,14 @@ static Token lex_str(Arena *arena, Lexer *lexer)
     while ((c = next(lexer)) != '"') {
         if (c == EOF || c == '\n') {
             char *err_msg = "Recieved newline or EOF inside string literal";
-            error_lex_append(lexer->e, err_msg, lexer->start, lexer->current);
+            error_lex(lexer->e, err_msg, lexer->start, lexer->current);
             return (Token){ .type = TOKEN_ERR };
         }
         if (c == '\\') {
             c = next(lexer);
             if (c != '"') {
                 char *err_msg = "Unknown escape character inside string literal";
-                error_lex_append(lexer->e, err_msg, lexer->start, lexer->current);
+                error_lex(lexer->e, err_msg, lexer->start, lexer->current);
                 had_error = true;
                 continue;
             }

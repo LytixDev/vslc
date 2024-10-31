@@ -20,8 +20,8 @@
 #include "ast.h"
 #include "base/sac_single.h"
 #include "base/str.h"
-#include "base/types.h"
 #include "lex.h"
+#include "type.h"
 
 #define ERROR_HANDLER_MAX_ERRORS 64 // Just give up after this
 
@@ -45,8 +45,11 @@ void error_handler_init(ErrorHandler *e, char *input, char *file_name);
 void error_handler_release(ErrorHandler *e);
 void error_handler_reset(ErrorHandler *e);
 
-void error_lex_append(ErrorHandler *e, char *msg, Point start, Point end);
-void error_parse_append(ErrorHandler *e, char *msg, Token guilty);
-void error_node_append(ErrorHandler *e, char *msg, AstNode *guilty);
+void error_msg_str8(ErrorHandler *e, Str8 msg);
+void error_lex(ErrorHandler *e, char *msg, Point start, Point end);
+void error_parse(ErrorHandler *e, char *msg, Token guilty);
+void error_node(ErrorHandler *e, char *msg, AstNode *guilty);
+void error_sym(ErrorHandler *e, char *msg, Str8 sym_name);
+// void error_type_unresolved(ErrorHandler *e, Str8List list, char *msg, Str8 type_name);
 
 #endif /* ERROR_H */
