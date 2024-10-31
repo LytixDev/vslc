@@ -20,6 +20,7 @@
 #include "ast.h"
 #include "base/base.h"
 #include "base/sac_single.h"
+#include "error.h"
 #include "lex.h"
 #include "parser.h"
 
@@ -56,15 +57,6 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_WHILE,
     0, // TOKEN_DO,
     0, // TOKEN_VAR,
-};
-
-char *PARSE_ERROR_MSGS[PET_LEN] = {
-    "Expected ')' to terminate the group expression", /* PET_EXPECTED_RPAREN */
-    "Expected ']' to terminate the array indexing", /* PET_EXPECTED_RBRACKET */
-    "Expected 'do' keyword to start the while-loop", /* PET_EXPECTED_DO */
-    "Expected 'then' keyword after if-statement condition", /* PET_EXPECTED_THEN */
-    "Expected ')' to end function call ", /* PET_EXPCETED_CALL_END */
-    "", /* PET_CUSTOME */
 };
 
 /* Forwards */
@@ -104,40 +96,6 @@ static bool match_token(Parser *parser, TokenType type)
     return false;
 }
 
-static ParseError *make_parse_error(Arena *arena, Token *failed, ParseErrorType pet, char *msg)
-{
-    ParseError *parse_error = m_arena_alloc(arena, sizeof(ParseError));
-    if (msg != NULL) {
-        size_t msg_len = strlen(msg) + 1; // TODO: avoid strlen?
-        parse_error->msg = m_arena_alloc(arena, msg_len);
-        memcpy(parse_error->msg, msg, msg_len);
-    } else {
-        parse_error->msg = NULL;
-    }
-
-    parse_error->type = pet;
-    parse_error->failed = failed;
-    parse_error->next = NULL;
-
-#ifdef DEBUG
-    fprintf(stderr, "%s\n", msg);
-#endif
-    return parse_error;
-}
-
-static void parse_error_append(Parser *parser, Token *failed, ParseErrorType pet, char *msg)
-{
-    ParseError *parse_error = make_parse_error(parser->arena, failed, pet, msg);
-    if (parser->err_head == NULL) {
-        parser->err_head = parse_error;
-    } else {
-        parser->err_tail->next = parse_error;
-    }
-    parser->err_tail = parse_error;
-
-    parser->n_errors++;
-}
-
 static bool is_bin_op(Token token)
 {
     switch (token.type) {
@@ -166,12 +124,12 @@ static bool is_relation_op(Token token)
     }
 }
 
-static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType pet)
+static Token consume_or_err(Parser *parser, TokenType expected, char *msg)
 {
     Token token = peek_token(parser);
     if (token.type != expected) {
-        next_token(parser);
-        parse_error_append(parser, &token, pet, NULL);
+        // next_token(parser);
+        error_parse_append(parser->lexer.e, msg, token);
         return (Token){ .type = TOKEN_ERR };
     }
     next_token(parser);
@@ -180,13 +138,13 @@ static Token consume_or_err(Parser *parser, TokenType expected, ParseErrorType p
 
 static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
 {
-    consume_or_err(parser, TOKEN_COLON, PET_CUSTOM);
-    Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+    consume_or_err(parser, TOKEN_COLON, "Expected ':' after declaration to denote type");
+    Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected typename after ':'");
     if (!match_token(parser, TOKEN_LBRACKET)) {
         return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
     }
     if (!allow_array_types) {
-        consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
+        consume_or_err(parser, TOKEN_RBRACKET, "Global arrays are not allowed");
         return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
     }
 
@@ -196,7 +154,7 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
         next_token(parser);
         elements = peek.num_value;
     }
-    consume_or_err(parser, TOKEN_RBRACKET, PET_CUSTOM);
+    consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate the array type");
     return (AstTypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
 }
 
@@ -207,7 +165,7 @@ static AstExprCall *parse_call(Parser *parser, Token identifier)
     AstNode *expr_list = NULL;
     if (!match_token(parser, TOKEN_RPAREN)) {
         expr_list = parse_expr_list(parser);
-        consume_or_err(parser, TOKEN_RPAREN, PET_EXPCETED_CALL_END);
+        consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to end function call");
     }
     return make_call(parser->arena, identifier.str_list_idx, expr_list);
 }
@@ -218,7 +176,8 @@ static AstExpr *parse_primary(Parser *parser)
     switch (token.type) {
     case TOKEN_LPAREN: {
         AstExpr *expr = parse_expr(parser, 0);
-        Token err = consume_or_err(parser, TOKEN_RPAREN, PET_EXPECTED_RPAREN);
+        Token err =
+            consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate the group expression");
         if (err.type == TOKEN_ERR) {
             // TODO: gracefully continue
             fprintf(stderr, "err");
@@ -240,7 +199,7 @@ static AstExpr *parse_primary(Parser *parser)
             next_token(parser);
             AstExpr *left = (AstExpr *)make_literal(parser->arena, token);
             AstExpr *right = parse_expr(parser, 0);
-            consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
+            consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate array indexing");
             return (AstExpr *)make_binary(parser->arena, left, next.type, right);
         } else {
             /* Parse single identifier */
@@ -288,7 +247,7 @@ static AstExprBinary *parse_relation(Parser *parser)
     AstExpr *left = parse_expr(parser, 0);
     Token op = peek_token(parser);
     if (!is_relation_op(op)) {
-        make_parse_error(parser->arena, &op, PET_CUSTOM, "Expected a relation operator.");
+        error_parse_append(parser->lexer.e, "Expected a relation operator", op);
     } else {
         next_token(parser);
     }
@@ -332,7 +291,7 @@ static AstStmtWhile *parse_while(Parser *parser)
 {
     /* Came from TOKEN_WHILE */
     AstExpr *condition = (AstExpr *)parse_relation(parser);
-    consume_or_err(parser, TOKEN_DO, PET_EXPECTED_DO);
+    consume_or_err(parser, TOKEN_DO, "Expected 'do' keyword to start the while-loop");
     AstStmt *body = parse_stmt(parser);
     return make_while(parser->arena, condition, body);
 }
@@ -341,7 +300,7 @@ static AstStmtIf *parse_if(Parser *parser)
 {
     /* Came from TOKEN_IF */
     AstExpr *condition = (AstExpr *)parse_relation(parser);
-    consume_or_err(parser, TOKEN_THEN, PET_EXPECTED_THEN);
+    consume_or_err(parser, TOKEN_THEN, "Expected 'then' keyword after if-statement condition");
     AstStmt *then = parse_stmt(parser);
     AstStmt *else_ = NULL;
     if (match_token(parser, TOKEN_ELSE)) {
@@ -364,8 +323,7 @@ static AstStmtBlock *parse_block(Parser *parser)
     Token next;
     while ((next = peek_token(parser)).type != TOKEN_END) {
         if (next.type == TOKEN_EOF) {
-            parse_error_append(parser, &next, PET_CUSTOM,
-                               "Unexpected EOF inside a block. Expected END");
+            error_parse_append(parser->lexer.e, "Found EOF inside a block. Expected END", next);
             break;
         }
         AstStmt *stmt = parse_stmt(parser);
@@ -410,13 +368,13 @@ static AstStmt *parse_stmt(Parser *parser)
         if (next.type == TOKEN_LBRACKET) {
             /* Assignment, left-hand side is an array indexing */
             AstExpr *right = parse_expr(parser, 0);
-            consume_or_err(parser, TOKEN_RBRACKET, PET_EXPECTED_RBRACKET);
+            consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate array indexing");
             left = (AstExpr *)make_binary(parser->arena, left, next.type, right);
             next = next_token(parser);
         }
 
         if (next.type != TOKEN_ASSIGNMENT) {
-            parse_error_append(parser, &next, PET_CUSTOM, "Expected assignment");
+            error_parse_append(parser->lexer.e, "Expected assignment", next);
             return NULL;
         }
 
@@ -430,7 +388,7 @@ static AstStmt *parse_stmt(Parser *parser)
     case TOKEN_BEGIN:
         return (AstStmt *)parse_block(parser);
     default:
-        parse_error_append(parser, &token, PET_CUSTOM, "Unrecognized first token in parse_stmt");
+        error_parse_append(parser->lexer.e, "Illegal first token in statement", token);
         return NULL;
     }
 }
@@ -449,7 +407,7 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
             next_token(parser);
             indices_head = m_arena_alloc_struct(parser->arena, TypedVar);
         }
-        Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+        Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected type after ':'");
         AstTypeInfo type_info = parse_type(parser, allow_array_types);
         TypedVar new = { .name = identifier.str_list_idx, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
@@ -479,14 +437,14 @@ static AstFunc *parse_func(Parser *parser)
 {
     /* Came from TOKEN_FUNC */
     // consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
-    Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
+    Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected function name");
 
-    consume_or_err(parser, TOKEN_LPAREN, PET_CUSTOM);
+    consume_or_err(parser, TOKEN_LPAREN, "Expected '(' to start function parameter list");
     TypedVarList vars = { 0 };
     if (peek_token(parser).type != TOKEN_RPAREN) {
         vars = parse_variable_list(parser, true);
     }
-    consume_or_err(parser, TOKEN_RPAREN, PET_CUSTOM);
+    consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate function parameter list");
 
     AstTypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
@@ -526,8 +484,8 @@ static AstRoot *parse_root(Parser *parser)
             }
         }; break;
         case TOKEN_STRUCT: {
-            Token name = consume_or_err(parser, TOKEN_IDENTIFIER, PET_CUSTOM);
-            consume_or_err(parser, TOKEN_ASSIGNMENT, PET_CUSTOM);
+            Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected struct name");
+            consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after struct name");
             TypedVarList members = parse_variable_list(parser, true);
             AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
@@ -539,7 +497,8 @@ static AstRoot *parse_root(Parser *parser)
             }
         }; break;
         default: {
-            printf("Not handled oops!\n");
+            error_parse_append(parser->lexer.e, "Illegal first token. Expected var, struct or func",
+                               next);
             break;
         };
         }
@@ -548,22 +507,16 @@ static AstRoot *parse_root(Parser *parser)
     return make_root(parser->arena, declarations, functions, structs);
 }
 
-
-ParseResult parse(Arena *arena, Arena *lex_arena, char *input)
+ParseResult parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)
 {
     Parser parser = {
         .arena = arena,
         .lex_arena = lex_arena,
-        .n_errors = 0,
-        .err_head = NULL,
-        .err_tail = NULL,
     };
-    lex_init(&parser.lexer, input);
+    lex_init(&parser.lexer, e, input);
 
     AstRoot *head = parse_root(&parser);
     return (ParseResult){
-        .n_errors = parser.n_errors,
-        .err_head = parser.err_head,
         .head = head,
         .str_list = parser.lexer.str_list,
     };

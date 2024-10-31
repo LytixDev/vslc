@@ -20,6 +20,8 @@
 #include "base/str.h"
 #include "base/types.h"
 
+typedef struct error_handler_t ErrorHandler; // forward decl from error.h
+
 typedef struct {
     u32 l; // Line
     u32 c; // Column
@@ -91,17 +93,6 @@ typedef struct {
     };
 } Token;
 
-
-typedef struct lex_error_t LexError;
-struct lex_error_t {
-    LexError *next;
-    char *msg;
-    Point start;
-    Point point_of_failure;
-};
-
-
-// TODO: should also keep track of the position of each newline ?
 typedef struct lexer_t {
     char *input; // The input string being scanned.
     u32 pos_start;
@@ -113,14 +104,11 @@ typedef struct lexer_t {
     Token next;
 
     Str8List str_list; // List of static strings
-
-    u32 n_errors;
-    LexError *err_head;
-    LexError *err_tail;
+    ErrorHandler *e;
 } Lexer;
 
 
-void lex_init(Lexer *lexer, char *input);
+void lex_init(Lexer *lexer, ErrorHandler *e, char *input);
 Token lex_next(Arena *arena, Lexer *lexer);
 Token lex_peek(Arena *arena, Lexer *lexer);
 

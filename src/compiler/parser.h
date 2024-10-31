@@ -19,32 +19,10 @@
 
 #include "ast.h"
 #include "base/sac_single.h"
+#include "error.h"
 #include "lex.h"
 
-typedef enum {
-    PET_EXPECTED_RPAREN,
-    PET_EXPECTED_RBRACKET,
-    PET_EXPECTED_DO,
-    PET_EXPECTED_THEN,
-    PET_EXPCETED_CALL_END,
-    PET_CUSTOM,
-
-    PET_LEN,
-} ParseErrorType;
-
-extern char *PARSE_ERROR_MSGS[PET_LEN];
-
-typedef struct parse_error_t ParseError;
-struct parse_error_t {
-    ParseErrorType type;
-    ParseError *next;
-    char *msg; // @NULLABLE. If NULL then use the error message based on the type.
-    Token *failed; // The token that caused the error
-};
-
 typedef struct {
-    u32 n_errors;
-    ParseError *err_head;
     AstRoot *head;
     Str8List str_list;
 } ParseResult;
@@ -53,11 +31,8 @@ typedef struct {
     Arena *arena; // Allocator for all dynamic allocations performed by the parser
     Arena *lex_arena;
     Lexer lexer;
-    u32 n_errors;
-    ParseError *err_head;
-    ParseError *err_tail;
 } Parser;
 
-ParseResult parse(Arena *arena, Arena *lex_arena, char *input);
+ParseResult parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input);
 
 #endif /* PARSER_H */

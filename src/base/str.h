@@ -17,6 +17,7 @@
 #ifndef STR_H
 #define STR_H
 
+#include "base.h"
 #include "sac_single.h"
 #include "types.h"
 
@@ -58,6 +59,7 @@ Str8Builder make_str_builder(Arena *arena);
 // void str_builder_append_str8(StrBuilder *sb, Str8 str);
 void str_builder_append_u8(Str8Builder *sb, u8 c);
 void str_builder_append_cstr(Str8Builder *sb, char *cstr, u32 len);
+void str_builder_sprintf(Str8Builder *sb, char *fmt, int count, ...);
 Str8 str_builder_end(Str8Builder *sb);
 
 void str_list_init(Str8List *list);

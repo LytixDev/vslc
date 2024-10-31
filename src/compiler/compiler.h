@@ -20,15 +20,19 @@
 #include "base/sac_single.h"
 #include "base/str.h"
 #include "base/types.h"
+#include "error.h"
+
 
 typedef struct {
-    bool had_error;
     // For temporary data that ONLY needs to persist for the duration of a single compiler pass
     // Cleared before each pass.
     Arena *persist_arena;
     Arena *pass_arena;
 
     Str8List str_list;
+    ErrorHandler *e;
+
+    /* Error */
 } Compiler;
 
 #endif /* COMPILER_H */
