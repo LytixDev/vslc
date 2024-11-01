@@ -27,7 +27,7 @@
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"
 
-u32 parser(char *input)
+u32 run(char *input)
 {
     Arena arena;
     Arena lex_arena;
@@ -79,7 +79,7 @@ int main(void)
         i++;
     }
 
-    u32 n_errors = parser(input);
+    u32 n_errors = run(input);
     if (n_errors == 0)
         return 0;
     return 1;
