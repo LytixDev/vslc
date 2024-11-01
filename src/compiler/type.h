@@ -36,7 +36,7 @@ typedef enum {
 typedef struct {
     TypeInfoKind kind;
     bool is_resolved;
-    u32 generated_by_name; // Not used by TYPE_ARRAY
+    Str8 generated_by_name; // Not used by TYPE_ARRAY
 } TypeInfo;
 
 typedef struct {
@@ -52,8 +52,8 @@ typedef struct {
 // NOTE: Not an actual TypeInfo kind
 typedef struct {
     bool is_resolved;
-    u32 name; // Index into the string list
-    u32 member_offset;
+    Str8 name;
+    u32 offset;
     union {
         TypeInfo *type;
         AstTypeInfo ati;
@@ -70,13 +70,13 @@ typedef struct {
 typedef struct {
     TypeInfo info;
     u32 members_len;
-    u32 *member_names;
+    Str8 *member_names;
 } TypeInfoEnum;
 
 typedef struct {
     TypeInfo info;
     u32 n_params;
-    u32 *param_names;
+    Str8 *param_names;
     TypeInfo **param_types;
     TypeInfo *return_type;
 } TypeInfoFunc;
@@ -127,7 +127,7 @@ struct symbol_table_t {
 
 struct symbol_t {
     SymbolKind kind;
-    u32 name;
+    Str8 name;
     TypeInfo *type_info; // @NULLABLE
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
     SymbolTable function_symtable; // Only used when node is AST_FUNC

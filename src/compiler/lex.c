@@ -99,23 +99,11 @@ static void accept_run(Lexer *lexer, char *accept_list)
 
 static Token emit(Lexer *lexer, TokenType type)
 {
-    Token token = {
-        .type = type,
-        .start = lexer->start,
-        .end = lexer->current,
-        .lexeme = (StrView8){ .str = (u8 *)(lexer->input) + lexer->pos_start,
-                              .len = lexer->pos_current - lexer->pos_start + 1 },
-    };
-
-    /* Set value based on type */
-    if (type == TOKEN_NUM) {
-        // TODO: convert to number
-        char *lexeme[token.lexeme.len + 1];
-        memcpy(lexeme, token.lexeme.str, token.lexeme.len);
-        lexeme[token.lexeme.len] = 0;
-        token.num_value = atof((const char *)lexeme);
-    }
-
+    Token token = { .type = type,
+                    .start = lexer->start,
+                    .end = lexer->current,
+                    .lexeme = (Str8View){ .str = (u8 *)(lexer->input) + lexer->pos_start,
+                                          .len = lexer->pos_current - lexer->pos_start } };
     reset_token_ctx(lexer);
     return token;
 }
@@ -124,7 +112,7 @@ static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenType type)
 {
     Token token = emit(lexer, type);
     Str8 final = str_builder_end(sb);
-    token.str_list_idx = str_list_push(&lexer->str_list, final);
+    token.lexeme = final;
     return token;
 }
 
@@ -153,8 +141,6 @@ void lex_init(Lexer *lexer, ErrorHandler *e, char *input)
         .current = (Point){ 0 },
         .e = e,
     };
-
-    str_list_init(&lexer->str_list);
 }
 
 Token lex_peek(Arena *arena, Lexer *lexer)

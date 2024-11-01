@@ -22,14 +22,14 @@
 
 
 typedef struct {
-    u32 name; // index into the str_list
+    Str8 name;
     bool is_pointer;
     bool is_array;
     s32 elements; // a -1 value means the array is dynamic
 } AstTypeInfo;
 
 typedef struct {
-    u32 name; // index into the str_list
+    Str8 name;
     AstTypeInfo ast_type_info;
 } TypedVar;
 
@@ -124,15 +124,12 @@ typedef struct {
 typedef struct {
     AstExprType type;
     LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
-    union {
-        u32 str_list_idx;
-        s32 num_value;
-    };
+    Str8View literal; // Guranteed to be zero-terminated for STR and IDENT aka Str8
 } AstExprLiteral;
 
 typedef struct {
     AstExprType type;
-    u32 identifier; // Index into str_list
+    Str8 identifier;
     AstNode *args; // @NULLABLE. type should either be Literal or List
 } AstExprCall;
 
@@ -189,7 +186,7 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
-    u32 name; // Index into str_list
+    Str8 name;
     TypedVarList parameters;
     AstTypeInfo return_type;
     AstStmt *body;
@@ -197,13 +194,13 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
-    u32 name; // Index into str_list
+    Str8 name;
     TypedVarList members;
 } AstStruct;
 
 typedef struct {
     AstNodeType type;
-    u32 name; // Index into str_list
+    Str8 name;
     TypedVarList members; // Untyped
 } AstEnum;
 
@@ -241,7 +238,7 @@ extern char *node_type_str_map[AST_NODE_TYPE_LEN];
 AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
 AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right);
 AstExprLiteral *make_literal(Arena *arena, Token token);
-AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args);
+AstExprCall *make_call(Arena *arena, Str8 identifier, AstNode *args);
 
 /* Statements */
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
@@ -251,10 +248,10 @@ AstStmtBlock *make_block(Arena *arena, TypedVarList declarations, AstList *state
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
-AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
+AstFunc *make_function(Arena *arena, Str8 name, TypedVarList parameters, AstStmt *body,
                        AstTypeInfo return_type);
-AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members);
-AstEnum *make_enum(Arena *arena, u32 name, TypedVarList values);
+AstStruct *make_struct(Arena *arena, Str8 name, TypedVarList members);
+AstEnum *make_enum(Arena *arena, Str8 name, TypedVarList values);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
@@ -262,7 +259,7 @@ AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars);
 AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
                    AstList enums);
 
-void ast_print(AstNode *head, Str8 *str_list, u32 indent);
+void ast_print(AstNode *head, u32 indent);
 
 
 #endif /* AST_H */

@@ -23,16 +23,11 @@
 #include "lex.h"
 
 typedef struct {
-    AstRoot *head;
-    Str8List str_list;
-} ParseResult;
-
-typedef struct {
     Arena *arena; // Allocator for all dynamic allocations performed by the parser
     Arena *lex_arena;
     Lexer lexer;
 } Parser;
 
-ParseResult parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input);
+AstRoot *parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input);
 
 #endif /* PARSER_H */

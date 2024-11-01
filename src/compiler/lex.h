@@ -89,12 +89,7 @@ typedef struct {
     TokenType type;
     Point start;
     Point end;
-    StrView8 lexeme;
-
-    union {
-        u32 str_list_idx;
-        s32 num_value;
-    };
+    Str8View lexeme; // For identifiers and strings, these are actually arena allocated Str8's
 } Token;
 
 typedef struct lexer_t {
@@ -107,7 +102,7 @@ typedef struct lexer_t {
     bool has_next;
     Token next;
 
-    Str8List str_list; // List of static strings
+    // Str8List str_list; // List of static strings
     ErrorHandler *e;
 } Lexer;
 

@@ -29,7 +29,7 @@
 #include <string.h>
 
 
-static void *make_type_info(Arena *arena, TypeInfoKind kind, u32 generated_by_name)
+static void *make_type_info(Arena *arena, TypeInfoKind kind, Str8 generated_by_name)
 {
     TypeInfo *info;
     switch (kind) {
@@ -84,16 +84,15 @@ static SymbolTable make_symt(SymbolTable *parent)
     return symt;
 }
 
-static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind kind, u32 name,
+static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind kind, Str8 name,
                             TypeInfo *type_info, AstNode *node)
 {
     // TODO: check if symbol already exists
     // TODO: A local symbol is not allowed to exist as a global func or type
     // if type == SYMBOL_LOCAL_VAR, traverse parents of hasmaps and ensure no exists
-    Str8 sym_name = compiler->str_list.strs[name];
-    Symbol *sym_existing = hashmap_get(&symt->map, sym_name.str, sym_name.len);
+    Symbol *sym_existing = hashmap_get(&symt->map, name.str, name.len);
     if (sym_existing != NULL) {
-        error_sym(compiler->e, "Symbol already exists", sym_name);
+        error_sym(compiler->e, "Symbol already exists", name);
         /* We will continue with the OG symbol, but will stop compilation later */
         return sym_existing;
     }
@@ -130,7 +129,7 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
         symt->type_len++;
     }
 
-    hashmap_put(&symt->map, sym_name.str, sym_name.len, sym, sizeof(Symbol *), false);
+    hashmap_put(&symt->map, name.str, name.len, sym, sizeof(Symbol *), false);
     return sym;
 }
 
@@ -149,15 +148,15 @@ static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati)
 {
     // NOTE: This function uses the root symbol table. Okay as of now since we don't allow
     //       declarations that generate types that aren't global.
-    Str8 key = compiler->str_list.strs[ati.name];
-    Symbol *sym = symt_find_sym(&compiler->symt_root, key);
+    Str8 sym_name = ati.name;
+    Symbol *sym = symt_find_sym(&compiler->symt_root, sym_name);
     /* Not found */
     if (sym == NULL) {
         return NULL;
     }
     /* Symbol is not a type */
     if (sym->kind != SYMBOL_TYPE) {
-        Str8 sym_name = compiler->str_list.strs[sym->name];
+        // Str8 sym_name = sym->name;
         error_sym(compiler->e, "Wants to be used as a type, but is in fact not :-(", sym_name);
         return NULL;
     }
@@ -186,7 +185,7 @@ static TypeInfoEnum *enum_decl_to_type(Compiler *compiler, AstEnum *decl)
 {
     Arena *arena = compiler->persist_arena;
     TypeInfoEnum *t = make_type_info(arena, TYPE_ENUM, decl->name);
-    t->member_names = m_arena_alloc(arena, sizeof(u32) * decl->members.len);
+    t->member_names = m_arena_alloc(arena, sizeof(Str8) * decl->members.len);
     t->members_len = decl->members.len;
 
     for (u32 i = 0; i < decl->members.len; i++) {
@@ -233,7 +232,7 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
 {
     TypeInfoFunc *t = make_type_info(compiler->persist_arena, TYPE_FUNC, decl->name);
     t->n_params = decl->parameters.len;
-    t->param_names = m_arena_alloc(compiler->persist_arena, sizeof(u32) * t->n_params);
+    t->param_names = m_arena_alloc(compiler->persist_arena, sizeof(Str8) * t->n_params);
     t->param_types = m_arena_alloc(compiler->persist_arena, sizeof(TypeInfo *) * t->n_params);
     t->info.is_resolved = true;
 
@@ -257,9 +256,9 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
 }
 
 /* --- PRINT --- */
-static void type_info_print(Str8List list, TypeInfo *type_info)
+static void type_info_print(TypeInfo *type_info)
 {
-    // printf("[%s] ", type_info->is_resolved ? "R" : "U");
+    printf("[%s] ", type_info->is_resolved ? "R" : "U");
     switch (type_info->kind) {
     case TYPE_INTEGER: {
         TypeInfoInteger *t = (TypeInfoInteger *)type_info;
@@ -273,21 +272,17 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
         printf("struct {");
         for (u32 i = 0; i < t->members_len; i++) {
             TypeInfoStructMember *member = t->members[i];
-            Str8 name = list.strs[member->name];
+            Str8 name = member->name;
             if (member->is_resolved) {
                 if (member->type->kind == TYPE_ARRAY || member->type->kind == TYPE_POINTER) {
                     printf("%s: ", name.str);
-                    type_info_print(list, member->type);
+                    type_info_print(member->type);
                     printf(", ");
                 } else {
-                    u32 generated_by = member->type->generated_by_name;
-                    Str8 s = list.strs[generated_by];
-                    printf("%s: %s, ", name.str, s.str);
+                    printf("%s: %s, ", name.str, member->type->generated_by_name.str);
                 }
             } else {
-                u32 expected_type_name = member->ati.name;
-                Str8 s = list.strs[expected_type_name];
-                printf("%s: [U]%s, ", name.str, s.str);
+                printf("%s: [U]%s, ", name.str, member->ati.name.str);
             }
         }
         putchar('}');
@@ -296,8 +291,7 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
         TypeInfoEnum *t = (TypeInfoEnum *)type_info;
         printf("enum {");
         for (u32 i = 0; i < t->members_len; i++) {
-            Str8 name = list.strs[t->member_names[i]];
-            printf("%s", name.str);
+            printf("%s", t->member_names[i].str);
             if (i != t->members_len - 1) {
                 printf(", ");
             }
@@ -307,29 +301,25 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
     case TYPE_FUNC: {
         TypeInfoFunc *t = (TypeInfoFunc *)type_info;
         // TODO: generated_by_name will not be set for arrays
-        printf("func {return_type: %s, ", list.strs[t->return_type->generated_by_name].str);
+        printf("func {return_type: %s, ", t->return_type->generated_by_name.str);
         printf("params: [");
         for (u32 i = 0; i < t->n_params; i++) {
-            Str8 name = list.strs[t->param_names[i]];
-            Str8 type_name = list.strs[t->param_types[i]->generated_by_name];
-            printf("%s: %s, ", name.str, type_name.str);
+            printf("%s: %s, ", t->param_names[i].str, t->return_type[i].generated_by_name.str);
         }
         printf("]}");
     } break;
     case TYPE_ARRAY: {
         TypeInfoArray *t = (TypeInfoArray *)type_info;
         if (t->element_type->kind == TYPE_POINTER) {
-            type_info_print(list, t->element_type);
+            type_info_print(t->element_type);
         } else {
-            Str8 element_type_name = list.strs[t->info.generated_by_name];
-            printf("%s", element_type_name.str);
+            printf("%s", t->info.generated_by_name.str);
         }
         printf("[%d]", t->elements);
     } break;
     case TYPE_POINTER: {
         TypeInfoPointer *t = (TypeInfoPointer *)type_info;
-        Str8 element_type_name = list.strs[t->info.generated_by_name];
-        printf("^%s", element_type_name.str);
+        printf("^%s", t->info.generated_by_name.str);
     } break;
     default:
         break;
@@ -484,7 +474,10 @@ static bool find_cycles(Compiler *compiler, Arena *graph_arena, Graph *graph)
 static void fill_builtin_types(Compiler *compiler)
 {
     /* s32 */
-    u32 name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "s32");
+    Str8Builder sb = make_str_builder(compiler->persist_arena);
+    str_builder_append_cstr(&sb, "s32", 3);
+    sb.str.len++; // TODO: fix HACK
+    Str8 name = str_builder_end(&sb);
     TypeInfoInteger *s32_builtin = make_type_info(compiler->persist_arena, TYPE_INTEGER, name);
     s32_builtin->info.is_resolved = true;
     s32_builtin->size = 32;
@@ -492,7 +485,10 @@ static void fill_builtin_types(Compiler *compiler)
     symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, name, (TypeInfo *)s32_builtin, NULL);
 
     /* bool */
-    name = str_list_push_cstr(compiler->persist_arena, &compiler->str_list, "bool");
+    sb = make_str_builder(compiler->persist_arena);
+    str_builder_append_cstr(&sb, "bool", 4);
+    sb.str.len++; // TODO: fix HACK
+    name = str_builder_end(&sb);
     TypeInfoBool *bool_builtin = make_type_info(compiler->persist_arena, TYPE_BOOL, name);
     bool_builtin->info.is_resolved = true;
     symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, name, (TypeInfo *)bool_builtin, NULL);
@@ -546,8 +542,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
          * references exists.
          */
         if (t->kind != TYPE_STRUCT) {
-            Str8 type_name = compiler->str_list.strs[t->generated_by_name];
-            error_sym(compiler->e, "A type used here is not declared", type_name);
+            error_sym(compiler->e, "A type used here is not declared", t->generated_by_name);
             continue;
         }
 
@@ -560,8 +555,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
             }
             TypeInfo *m_t = ast_type_resolve(compiler, m->ati);
             if (m_t == NULL) {
-                Str8 type_name = compiler->str_list.strs[m->ati.name];
-                error_sym(compiler->e, "Type of struct member is never declared", type_name);
+                error_sym(compiler->e, "Type of struct member is never declared", m->ati.name);
                 t_struct->info.is_resolved = false;
                 continue;
             }
@@ -594,7 +588,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     // Print symbols
     for (u32 i = 0; i < compiler->symt_root.sym_len; i++) {
         Symbol *sym = compiler->symt_root.symbols[i];
-        printf("%s", compiler->str_list.strs[sym->name].str);
+        printf("%.*s", STR8VIEW_PRINT(sym->name));
         if (sym->type_info == NULL) {
             putchar('\n');
             continue;
@@ -602,7 +596,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         // Print type
         // printf(" -> %d, is_resolved %d\n", sym->type_info->kind, sym->type_info->is_resolved);
         printf("\t\t-> ");
-        type_info_print(compiler->str_list, sym->type_info);
+        type_info_print(sym->type_info);
         putchar('\n');
     }
 }

@@ -52,7 +52,18 @@ typedef struct {
  * A view into memory.
  * Not guaranteed to be null terminated.
  */
-typedef Str8 StrView8;
+typedef Str8 Str8View;
+
+/* Used with %.*s */
+#define STR8VIEW_PRINT(view) (int)(view).len, (const char *)(view).str
+/* Str8View from a literal */
+#define STR8VIEW_LIT(literal)                \
+    (Str8View)                               \
+    {                                        \
+        sizeof(literal) - 1, (u8 *)(literal) \
+    }
+#define STR8VIEW_EQUAL(a, b) \
+    ((a).len == (b).len && ((a).len == 0 || memcmp((a).str, (b).str, (a).len) == 0))
 
 
 Str8Builder make_str_builder(Arena *arena);

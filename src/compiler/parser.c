@@ -149,24 +149,22 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
     bool is_pointer = match_token(parser, TOKEN_CARET);
     Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected typename after ':'");
     if (!match_token(parser, TOKEN_LBRACKET)) {
-        return (
-            AstTypeInfo){ .name = name.str_list_idx, .is_pointer = is_pointer, .is_array = false };
+        return (AstTypeInfo){ .name = name.lexeme, .is_pointer = is_pointer, .is_array = false };
     }
     if (!allow_array_types) {
         consume_or_err(parser, TOKEN_RBRACKET, "Global arrays are not allowed");
-        return (
-            AstTypeInfo){ .name = name.str_list_idx, .is_pointer = is_pointer, .is_array = false };
+        return (AstTypeInfo){ .name = name.lexeme, .is_pointer = is_pointer, .is_array = false };
     }
 
     s32 elements = -1;
     Token peek = peek_token(parser);
     if (peek.type == TOKEN_NUM) {
         next_token(parser);
-        elements = peek.num_value;
+        elements = 10; // peek.num_value; TODO: Str8View to s32
     }
     consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate the array type");
     return (AstTypeInfo){
-        .name = name.str_list_idx, .is_pointer = is_pointer, .is_array = true, .elements = elements
+        .name = name.lexeme, .is_pointer = is_pointer, .is_array = true, .elements = elements
     };
 }
 
@@ -179,7 +177,7 @@ static AstExprCall *parse_call(Parser *parser, Token identifier)
         expr_list = parse_expr_list(parser);
         consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to end function call");
     }
-    return make_call(parser->arena, identifier.str_list_idx, expr_list);
+    return make_call(parser->arena, identifier.lexeme, expr_list);
 }
 
 static AstExpr *parse_primary(Parser *parser)
@@ -448,7 +446,7 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types, 
         if (typed) {
             type_info = parse_type(parser, allow_array_types);
         }
-        TypedVar new = { .name = identifier.str_list_idx, .ast_type_info = type_info };
+        TypedVar new = { .name = identifier.lexeme, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
         typed_vars.len++;
@@ -487,7 +485,7 @@ static AstFunc *parse_func(Parser *parser)
 
     AstTypeInfo return_type = parse_type(parser, true);
     AstStmt *body = parse_stmt(parser);
-    AstFunc *func = make_function(parser->arena, identifier.str_list_idx, vars, body, return_type);
+    AstFunc *func = make_function(parser->arena, identifier.lexeme, vars, body, return_type);
     return func;
 }
 
@@ -527,7 +525,7 @@ static AstRoot *parse_root(Parser *parser)
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected struct name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after struct name");
             TypedVarList members = parse_variable_list(parser, true, true);
-            AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
+            AstStruct *struct_decl = make_struct(parser->arena, name.lexeme, members);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
             if (structs.head == NULL) {
                 structs.head = node_node;
@@ -540,7 +538,7 @@ static AstRoot *parse_root(Parser *parser)
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected enum name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after enum name");
             TypedVarList values = parse_variable_list(parser, true, false);
-            AstEnum *enum_decl = make_enum(parser->arena, name.str_list_idx, values);
+            AstEnum *enum_decl = make_enum(parser->arena, name.lexeme, values);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)enum_decl);
             if (enums.head == NULL) {
                 enums.head = node_node;
@@ -559,7 +557,7 @@ static AstRoot *parse_root(Parser *parser)
     return make_root(parser->arena, declarations, functions, structs, enums);
 }
 
-ParseResult parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)
+AstRoot *parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)
 {
     Parser parser = {
         .arena = arena,
@@ -567,9 +565,5 @@ ParseResult parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)
     };
     lex_init(&parser.lexer, e, input);
 
-    AstRoot *head = parse_root(&parser);
-    return (ParseResult){
-        .head = head,
-        .str_list = parser.lexer.str_list,
-    };
+    return parse_root(&parser);
 }

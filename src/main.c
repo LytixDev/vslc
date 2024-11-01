@@ -16,6 +16,7 @@
  */
 #include <stdio.h>
 
+#include "compiler/ast.h"
 #include "compiler/compiler.h"
 #include "compiler/error.h"
 #include "compiler/parser.h"
@@ -37,7 +38,7 @@ u32 run(char *input)
     ErrorHandler e;
     error_handler_init(&e, input, "test.vsl");
 
-    ParseResult res = parse(&arena, &lex_arena, &e, input);
+    AstRoot *ast_root = parse(&arena, &lex_arena, &e, input);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
         printf("%s\n", err->msg.str);
     }
@@ -45,18 +46,16 @@ u32 run(char *input)
         goto done;
     }
 
-    ast_print((AstNode *)res.head, res.str_list.strs, 0);
+    ast_print((AstNode *)ast_root, 0);
     putchar('\n');
 
     error_handler_reset(&e);
-    Compiler compiler = { .persist_arena = &arena, .str_list = res.str_list, .e = &e };
-    symbol_generate(&compiler, res.head);
+    Compiler compiler = { .persist_arena = &arena, .e = &e };
+    symbol_generate(&compiler, ast_root);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
         printf("%s\n", err->msg.str);
     }
-
 done:
-    // str_list_free(&res.str_list);
     error_handler_release(&e);
     m_arena_release(&arena);
     m_arena_release(&lex_arena);

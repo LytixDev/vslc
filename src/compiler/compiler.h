@@ -18,7 +18,6 @@
 #define COMPILER_H
 
 #include "base/sac_single.h"
-#include "base/str.h"
 #include "type.h"
 
 typedef struct error_handler_t ErrorHandler; // forward decl from error.h
@@ -32,7 +31,6 @@ typedef struct compiler_t {
 
     SymbolTable symt_root;
 
-    Str8List str_list;
     ErrorHandler *e;
 } Compiler;
 
