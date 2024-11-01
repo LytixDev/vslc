@@ -20,6 +20,8 @@
 #include "base/str.h"
 #include "base/types.h"
 
+typedef struct error_handler_t ErrorHandler; // forward decl from error.h
+
 typedef struct {
     u32 l; // Line
     u32 c; // Column
@@ -56,13 +58,17 @@ typedef enum {
     TOKEN_RPAREN,
     TOKEN_LBRACKET,
     TOKEN_RBRACKET,
+    TOKEN_DOT,
     TOKEN_COMMA,
+    TOKEN_AMPERSAND, // &
+    TOKEN_CARET, // ^
     TOKEN_EOF,
 
     // Identifier and reserved words
     TOKEN_IDENTIFIER,
     TOKEN_FUNC,
     TOKEN_STRUCT,
+    TOKEN_ENUM,
     TOKEN_BEGIN,
     TOKEN_END,
     TOKEN_RETURN,
@@ -83,25 +89,9 @@ typedef struct {
     TokenType type;
     Point start;
     Point end;
-    StrView8 lexeme;
-
-    union {
-        u32 str_list_idx;
-        s32 num_value;
-    };
+    Str8View lexeme; // For identifiers and strings, these are actually arena allocated Str8's
 } Token;
 
-
-typedef struct lex_error_t LexError;
-struct lex_error_t {
-    LexError *next;
-    char *msg;
-    Point start;
-    Point point_of_failure;
-};
-
-
-// TODO: should also keep track of the position of each newline ?
 typedef struct lexer_t {
     char *input; // The input string being scanned.
     u32 pos_start;
@@ -112,15 +102,12 @@ typedef struct lexer_t {
     bool has_next;
     Token next;
 
-    Str8List str_list; // List of static strings
-
-    u32 n_errors;
-    LexError *err_head;
-    LexError *err_tail;
+    // Str8List str_list; // List of static strings
+    ErrorHandler *e;
 } Lexer;
 
 
-void lex_init(Lexer *lexer, char *input);
+void lex_init(Lexer *lexer, ErrorHandler *e, char *input);
 Token lex_next(Arena *arena, Lexer *lexer);
 Token lex_peek(Arena *arena, Lexer *lexer);
 

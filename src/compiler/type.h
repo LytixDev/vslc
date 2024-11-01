@@ -14,26 +14,29 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef SYMBOL_H
-#define SYMBOL_H
+#ifndef TYPE_H
+#define TYPE_H
 
 #include "ast.h"
 #include "base/nicc.h"
-#include "compiler.h"
+
+typedef struct compiler_t Compiler; // forward decl from compiler.h
 
 typedef enum {
     TYPE_INTEGER = 0,
     TYPE_BOOL,
     TYPE_STRUCT,
-    TYPE_ARRAY,
+    TYPE_ENUM,
     TYPE_FUNC,
+    TYPE_ARRAY,
+    TYPE_POINTER,
     TYPE_INFO_KIND_LEN
 } TypeInfoKind;
 
 typedef struct {
     TypeInfoKind kind;
     bool is_resolved;
-    u32 generated_by_name; // Not used by TYPE_ARRAY
+    Str8 generated_by_name; // Not used by TYPE_ARRAY
 } TypeInfo;
 
 typedef struct {
@@ -49,8 +52,8 @@ typedef struct {
 // NOTE: Not an actual TypeInfo kind
 typedef struct {
     bool is_resolved;
-    u32 name; // Index into the string list
-    u32 member_offset;
+    Str8 name;
+    u32 offset;
     union {
         TypeInfo *type;
         AstTypeInfo ati;
@@ -59,10 +62,24 @@ typedef struct {
 
 typedef struct {
     TypeInfo info;
-    u32 struct_id;
+    u32 struct_id; // Useful for graph algorithms
     u32 members_len;
     TypeInfoStructMember **members;
 } TypeInfoStruct;
+
+typedef struct {
+    TypeInfo info;
+    u32 members_len;
+    Str8 *member_names;
+} TypeInfoEnum;
+
+typedef struct {
+    TypeInfo info;
+    u32 n_params;
+    Str8 *param_names;
+    TypeInfo **param_types;
+    TypeInfo *return_type;
+} TypeInfoFunc;
 
 typedef struct {
     TypeInfo info;
@@ -72,11 +89,8 @@ typedef struct {
 
 typedef struct {
     TypeInfo info;
-    u32 n_params;
-    u32 *param_names;
-    TypeInfo **param_types;
-    TypeInfo *return_type;
-} TypeInfoFunc;
+    TypeInfo *pointer_to;
+} TypeInfoPointer;
 
 
 /* Symbol tuff */
@@ -113,16 +127,16 @@ struct symbol_table_t {
 
 struct symbol_t {
     SymbolKind kind;
-    u32 name;
+    Str8 name;
     TypeInfo *type_info; // @NULLABLE
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
     SymbolTable function_symtable; // Only used when node is AST_FUNC
 };
 
 
-void symbol_table_init(SymbolTable *table, HashMap *parent);
+// void symbol_table_init(SymbolTable *table, HashMap *parent);
 
-SymbolTable symbol_generate(Compiler *compiler, AstRoot *root);
+void symbol_generate(Compiler *compiler, AstRoot *root);
 
 
 /*
@@ -193,4 +207,4 @@ Statically check:
 >do not attempt to use variable or call func which does not exist
 >do not have two funcs or two vars in the same scope with same name
  */
-#endif /* SYMBOL_H */
+#endif /* TYPE_H */

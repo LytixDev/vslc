@@ -15,6 +15,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -54,8 +55,49 @@ void str_builder_append_cstr(Str8Builder *sb, char *cstr, u32 len)
         sb->cap *= 2;
     }
 
-    memcpy((char *)sb->str.str, cstr, len);
+    memcpy((char *)(sb->str.str + sb->str.len), cstr, len);
     sb->str.len += len;
+}
+
+void str_builder_sprintf(Str8Builder *sb, char *fmt, int count, ...)
+{
+    va_list args;
+    va_start(args, count);
+
+    for (char *p = fmt; *p != '\0'; p++) {
+        if (*p == '%' && *(p + 1) != '\0') {
+            p++; // Skip the '%' character
+            switch (*p) {
+            /* Integer */
+            case 'd': {
+                int num = va_arg(args, int);
+                char num_buffer[32];
+                int num_len = snprintf(num_buffer, sizeof(num_buffer), "%d", num);
+
+                for (int i = 0; i < num_len; i++) {
+                    str_builder_append_u8(sb, (u8)num_buffer[i]);
+                }
+            } break;
+            /* String */
+            case 's': {
+                char *str = va_arg(args, char *);
+                size_t str_len = strlen(str);
+                str_builder_append_cstr(sb, str, str_len);
+                break;
+            }
+            default:
+                /* If unknown specifier, append the '%' and the following character */
+                str_builder_append_u8(sb, (u8)'%');
+                str_builder_append_u8(sb, (u8)*p);
+                break;
+            }
+        } else {
+            /* Regular char */
+            str_builder_append_u8(sb, (u8)*p);
+        }
+    }
+
+    va_end(args);
 }
 
 Str8 str_builder_end(Str8Builder *sb)

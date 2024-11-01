@@ -20,12 +20,13 @@
 #include <stdio.h>
 
 char *node_type_str_map[AST_NODE_TYPE_LEN] = {
-    "EXPR_UNARY",        "EXPR_BINARY", "EXPR_LITERAL", "EXPR_CALL",
-
-    "STMT_WHILE",        "STMT_IF",     "STMT_ABRUPT",  "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
-    "STMT_BREAK_RETURN", "STMT_PRINT",  "STMT_EXPR",    "STMT_BLOCK",        "STMT_ASSIGNMENT",
-
-    "AST_FUNC",          "AST_STRUCT",  "AST_LIST",     "AST_NODE_VAR_LIST", "AST_ROOT",
+    "EXPR_UNARY",        "EXPR_BINARY",       "EXPR_LITERAL",
+    "EXPR_CALL",         "STMT_WHILE",        "STMT_IF",
+    "STMT_ABRUPT",       "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
+    "STMT_BREAK_RETURN", "STMT_PRINT",        "STMT_EXPR",
+    "STMT_BLOCK",        "STMT_ASSIGNMENT",   "AST_FUNC",
+    "AST_STRUCT",        "AST_ENUM",          "AST_LIST",
+    "AST_NODE_VAR_LIST", "AST_ROOT",
 };
 
 /* Expressions */
@@ -52,17 +53,18 @@ AstExprLiteral *make_literal(Arena *arena, Token token)
 {
     AstExprLiteral *literal = m_arena_alloc(arena, sizeof(AstExprLiteral));
     literal->type = EXPR_LITERAL;
+    literal->literal = token.lexeme;
     if (token.type == TOKEN_NUM) {
         literal->lit_type = LIT_NUM;
-        literal->num_value = token.num_value;
+    } else if (token.type == TOKEN_STR) {
+        literal->lit_type = LIT_STR;
     } else {
-        literal->lit_type = token.type == TOKEN_IDENTIFIER ? LIT_IDENT : LIT_STR;
-        literal->str_list_idx = token.str_list_idx;
+        literal->lit_type = LIT_IDENT;
     }
     return literal;
 }
 
-AstExprCall *make_call(Arena *arena, u32 identifier, AstNode *args)
+AstExprCall *make_call(Arena *arena, Str8View identifier, AstNode *args)
 {
     AstExprCall *call = m_arena_alloc(arena, sizeof(AstExprCall));
     call->type = EXPR_CALL;
@@ -118,7 +120,7 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 }
 
 /* Other nodes */
-AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
+AstFunc *make_function(Arena *arena, Str8View name, TypedVarList parameters, AstStmt *body,
                        AstTypeInfo return_type)
 {
     AstFunc *func = m_arena_alloc(arena, sizeof(AstFunc));
@@ -130,13 +132,22 @@ AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt 
     return func;
 }
 
-AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members)
+AstStruct *make_struct(Arena *arena, Str8View name, TypedVarList members)
 {
-    AstStruct *func = m_arena_alloc(arena, sizeof(AstStruct));
-    func->type = AST_STRUCT;
-    func->name = name;
-    func->members = members;
-    return func;
+    AstStruct *struct_decl = m_arena_alloc(arena, sizeof(AstStruct));
+    struct_decl->type = AST_STRUCT;
+    struct_decl->name = name;
+    struct_decl->members = members;
+    return struct_decl;
+}
+
+AstEnum *make_enum(Arena *arena, Str8View name, TypedVarList values)
+{
+    AstEnum *enum_decl = m_arena_alloc(arena, sizeof(AstEnum));
+    enum_decl->type = AST_ENUM;
+    enum_decl->name = name;
+    enum_decl->members = values;
+    return enum_decl;
 }
 
 AstListNode *make_list_node(Arena *arena, AstNode *this)
@@ -170,13 +181,15 @@ AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars)
     return node_var_list;
 }
 
-AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs)
+AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
+                   AstList enums)
 {
     AstRoot *root = m_arena_alloc(arena, sizeof(AstRoot));
     root->type = AST_ROOT;
     root->declarations = declarations;
     root->functions = functions;
     root->structs = structs;
+    root->enums = enums;
     return root;
 }
 
@@ -188,15 +201,15 @@ static void print_indent(u32 indent)
     }
 }
 
-static void ast_print_typed_var_list(Str8 *str_list, TypedVarList vars)
+static void ast_print_typed_var_list(TypedVarList vars)
 {
     for (u32 i = 0; i < vars.len; i++) {
         TypedVar var = vars.vars[i];
         if (var.ast_type_info.is_array) {
-            printf("%s: %s[%d]", str_list[var.name].str, str_list[var.ast_type_info.name].str,
-                   var.ast_type_info.elements);
+            printf("%.*s: %.*s[%d]", STR8VIEW_PRINT(var.name),
+                   STR8VIEW_PRINT(var.ast_type_info.name), var.ast_type_info.elements);
         } else {
-            printf("%s: %s", str_list[var.name].str, str_list[var.ast_type_info.name].str);
+            printf("%.*s: %.*s", STR8VIEW_PRINT(var.name), STR8VIEW_PRINT(var.ast_type_info.name));
         }
         if (i != vars.len - 1) {
             printf(", ");
@@ -204,7 +217,7 @@ static void ast_print_typed_var_list(Str8 *str_list, TypedVarList vars)
     }
 }
 
-static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
+static void ast_print_expr(AstExpr *head, u32 indent)
 {
     putchar('\n');
     print_indent(indent);
@@ -213,9 +226,9 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
     switch (head->type) {
     case EXPR_UNARY: {
         AstExprUnary *unary = AS_UNARY(head);
-        char *op_text_repr = node_type_str_map[unary->op];
+        char *op_text_repr = token_type_str_map[unary->op];
         printf("%s", op_text_repr);
-        ast_print_expr(unary->expr, str_list, indent + 1);
+        ast_print_expr(unary->expr, indent + 1);
     } break;
     case EXPR_BINARY: {
         AstExprBinary *binary = AS_BINARY(head);
@@ -223,24 +236,18 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
         putchar('\n');
         print_indent(indent + 1);
         printf("op: %s", op_text_repr);
-        ast_print_expr(binary->left, str_list, indent + 1);
-        ast_print_expr(binary->right, str_list, indent + 1);
+        ast_print_expr(binary->left, indent + 1);
+        ast_print_expr(binary->right, indent + 1);
     } break;
     case EXPR_LITERAL: {
         AstExprLiteral *lit = AS_LITERAL(head);
-        if (lit->lit_type == LIT_NUM) {
-            printf("%d", lit->num_value);
-        } else if (lit->lit_type == LIT_IDENT) {
-            printf("%s", str_list[lit->str_list_idx].str);
-        } else {
-            printf("\"%s\"", str_list[lit->str_list_idx].str);
-        }
+        printf("%.*s", STR8VIEW_PRINT(lit->literal));
     } break;
     case EXPR_CALL: {
         AstExprCall *call = AS_CALL(head);
-        printf("%s", str_list[call->identifier].str);
+        printf("%.*s", STR8VIEW_PRINT(call->identifier));
         if (call->args) {
-            ast_print(call->args, str_list, indent + 1);
+            ast_print(call->args, indent + 1);
         }
     } break;
     default:
@@ -248,7 +255,7 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
     }
 }
 
-void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
+void ast_print_stmt(AstStmt *head, u32 indent)
 {
     if (indent != 0) {
         putchar('\n');
@@ -258,15 +265,15 @@ void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
     switch (head->type) {
     case STMT_WHILE: {
         AstStmtWhile *stmt = AS_WHILE(head);
-        ast_print_expr(stmt->condition, str_list, indent + 1);
-        ast_print_stmt(stmt->body, str_list, indent + 1);
+        ast_print_expr(stmt->condition, indent + 1);
+        ast_print_stmt(stmt->body, indent + 1);
     }; break;
     case STMT_IF: {
         AstStmtIf *stmt = AS_IF(head);
-        ast_print_expr(stmt->condition, str_list, indent + 1);
-        ast_print_stmt(stmt->then, str_list, indent + 1);
+        ast_print_expr(stmt->condition, indent + 1);
+        ast_print_stmt(stmt->then, indent + 1);
         if (stmt->else_ != NULL) {
-            ast_print_stmt(stmt->else_, str_list, indent + 1);
+            ast_print_stmt(stmt->else_, indent + 1);
         }
     }; break;
     case STMT_ABRUPT_BREAK:
@@ -276,32 +283,32 @@ void ast_print_stmt(AstStmt *head, Str8 *str_list, u32 indent)
     case STMT_PRINT: {
         AstStmtSingle *stmt = AS_SINGLE(head);
         if (stmt->node != NULL) {
-            ast_print(stmt->node, str_list, indent + 1);
+            ast_print(stmt->node, indent + 1);
         }
     }; break;
     case STMT_BLOCK: {
         AstStmtBlock *stmt = AS_BLOCK(head);
         printf(" vars=");
-        ast_print_typed_var_list(str_list, stmt->declarations);
-        ast_print((AstNode *)stmt->stmts, str_list, indent + 1);
+        ast_print_typed_var_list(stmt->declarations);
+        ast_print((AstNode *)stmt->stmts, indent + 1);
     }; break;
     case STMT_ASSIGNMENT: {
         AstStmtAssignment *stmt = AS_ASSIGNMENT(head);
-        ast_print_expr(stmt->left, str_list, indent + 1);
-        ast_print_expr(stmt->right, str_list, indent + 1);
+        ast_print_expr(stmt->left, indent + 1);
+        ast_print_expr(stmt->right, indent + 1);
     }; break;
     default:
         printf("NOT HANDLED");
     }
 }
 
-void ast_print(AstNode *head, Str8 *str_list, u32 indent)
+void ast_print(AstNode *head, u32 indent)
 {
     if ((u32)head->type < (u32)EXPR_TYPE_LEN) {
-        ast_print_expr((AstExpr *)head, str_list, indent);
+        ast_print_expr((AstExpr *)head, indent);
         return;
     } else if ((u32)head->type < (u32)STMT_TYPE_LEN) {
-        ast_print_stmt((AstStmt *)head, str_list, indent);
+        ast_print_stmt((AstStmt *)head, indent);
         return;
     }
 
@@ -313,32 +320,45 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
     switch (head->type) {
     case AST_ROOT: {
         AstRoot *root = AS_ROOT(head);
-        ast_print((AstNode *)(&root->declarations), str_list, indent + 1);
-        ast_print((AstNode *)(&root->functions), str_list, indent + 1);
-        ast_print((AstNode *)(&root->structs), str_list, indent + 1);
+        ast_print((AstNode *)(&root->declarations), indent + 1);
+        ast_print((AstNode *)(&root->functions), indent + 1);
+        ast_print((AstNode *)(&root->structs), indent + 1);
+        ast_print((AstNode *)(&root->enums), indent + 1);
     }; break;
     case AST_FUNC: {
         AstFunc *func = AS_FUNC(head);
-        printf("name=%s", str_list[func->name].str);
+        printf("name=%.*s", STR8VIEW_PRINT(func->name));
         printf(" parameters=");
-        ast_print_typed_var_list(str_list, func->parameters);
-        ast_print_stmt(func->body, str_list, indent + 1);
+        ast_print_typed_var_list(func->parameters);
+        ast_print_stmt(func->body, indent + 1);
     }; break;
     case AST_STRUCT: {
         AstStruct *struct_decl = AS_STRUCT(head);
-        printf("name=%s", str_list[struct_decl->name].str);
+        printf("name=%.*s", STR8VIEW_PRINT(struct_decl->name));
         printf(" members=");
-        ast_print_typed_var_list(str_list, struct_decl->members);
+        ast_print_typed_var_list(struct_decl->members);
+    }; break;
+    case AST_ENUM: {
+        AstEnum *enum_decl = AS_ENUM(head);
+        printf("name=%.*s", STR8VIEW_PRINT(enum_decl->name));
+        printf(" values=");
+        for (u32 i = 0; i < enum_decl->members.len; i++) {
+            TypedVar var = enum_decl->members.vars[i];
+            printf("%.*s", STR8VIEW_PRINT(var.name));
+            if (i != enum_decl->members.len - 1) {
+                printf(", ");
+            }
+        }
     }; break;
     case AST_LIST: {
         AstList *list = AS_LIST(head);
         for (AstListNode *node = list->head; node != NULL; node = node->next) {
-            ast_print(node->this, str_list, indent + 1);
+            ast_print(node->this, indent + 1);
         }
     }; break;
     case AST_NODE_VAR_LIST: {
         AstNodeVarList *node_var_list = AS_NODE_VAR_LIST(head);
-        ast_print_typed_var_list(str_list, node_var_list->vars);
+        ast_print_typed_var_list(node_var_list->vars);
     }; break;
     default:
         printf("NOT HANDLED");

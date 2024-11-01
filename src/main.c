@@ -18,8 +18,9 @@
 
 #include "compiler/ast.h"
 #include "compiler/compiler.h"
+#include "compiler/error.h"
 #include "compiler/parser.h"
-#include "compiler/symbol.h"
+#include "compiler/type.h"
 
 #include "base/str.h"
 #define NICC_IMPLEMENTATION
@@ -27,37 +28,38 @@
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"
 
-u32 parser(char *input)
+u32 run(char *input)
 {
     Arena arena;
     Arena lex_arena;
     m_arena_init_dynamic(&arena, 2, 512);
     m_arena_init_dynamic(&lex_arena, 1, 512);
 
-    ParseResult res = parse(&arena, &lex_arena, input);
-    ParseError *parse_error = res.err_head;
-    for (u32 i = 0; i < res.n_errors; i++) {
-        char *msg = parse_error->msg;
-        if (msg == NULL) {
-            msg = PARSE_ERROR_MSGS[parse_error->type];
-        }
-        fprintf(stderr, "[%i] %s\n", i + 1, msg);
+    ErrorHandler e;
+    error_handler_init(&e, input, "test.vsl");
+
+    AstRoot *ast_root = parse(&arena, &lex_arena, &e, input);
+    for (CompilerError *err = e.head; err != NULL; err = err->next) {
+        printf("%s\n", err->msg.str);
+    }
+    if (e.n_errors != 0) {
+        goto done;
     }
 
-    // if (res.n_errors == 0) {
-    //     ast_print((AstNode *)res.head, res.str_list.strs, 0);
-    //     printf("\n");
-    // }
+    ast_print((AstNode *)ast_root, 0);
+    putchar('\n');
 
-
-    Compiler compiler = { .persist_arena = &arena, .str_list = res.str_list };
-
-    symbol_generate(&compiler, res.head);
-
-    str_list_free(&compiler.str_list);
+    error_handler_reset(&e);
+    Compiler compiler = { .persist_arena = &arena, .e = &e };
+    symbol_generate(&compiler, ast_root);
+    for (CompilerError *err = e.head; err != NULL; err = err->next) {
+        printf("%s\n", err->msg.str);
+    }
+done:
+    error_handler_release(&e);
     m_arena_release(&arena);
     m_arena_release(&lex_arena);
-    return res.n_errors;
+    return e.n_errors;
 }
 
 
@@ -76,7 +78,7 @@ int main(void)
         i++;
     }
 
-    u32 n_errors = parser(input);
+    u32 n_errors = run(input);
     if (n_errors == 0)
         return 0;
     return 1;

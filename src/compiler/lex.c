@@ -16,6 +16,7 @@
  */
 #include "lex.h"
 #include "base/base.h"
+#include "error.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -25,8 +26,8 @@
 
 
 char *reserved_words[] = {
-    "func",     "struct", "begin", "end",  "return", "print", "break",
-    "continue", "if",     "then",  "else", "while",  "do",    "var",
+    "func",     "struct", "enum", "begin", "end",   "return", "print", "break",
+    "continue", "if",     "then", "else",  "while", "do",     "var",
 };
 
 
@@ -39,33 +40,6 @@ static void reset_token_ctx(Lexer *lexer)
 {
     lexer->pos_start = lexer->pos_current;
     lexer->start = lexer->current;
-}
-
-static LexError *make_lex_error(Arena *arena, Lexer *lexer, char *msg)
-{
-    LexError *lex_error = m_arena_alloc(arena, sizeof(LexError));
-    size_t msg_len = strlen(msg) + 1; // TODO: avoid strlen?
-    lex_error->msg = m_arena_alloc(arena, msg_len);
-    memcpy(lex_error->msg, msg, msg_len);
-    lex_error->start = lexer->start;
-    lex_error->point_of_failure = lexer->current;
-    lex_error->next = NULL;
-    return lex_error;
-}
-
-static void lex_error_append(Arena *arena, Lexer *lexer, char *msg)
-{
-    LexError *lex_error = make_lex_error(arena, lexer, msg);
-    if (lexer->err_head == NULL) {
-        lexer->err_head = lex_error;
-    } else {
-        lexer->err_tail->next = lex_error;
-    }
-    lexer->err_tail = lex_error;
-
-    lexer->n_errors++;
-
-    reset_token_ctx(lexer);
 }
 
 static char next(Lexer *lexer)
@@ -125,24 +99,11 @@ static void accept_run(Lexer *lexer, char *accept_list)
 
 static Token emit(Lexer *lexer, TokenType type)
 {
-    Token token = {
-        .type = type,
-        .start = lexer->start,
-        .end = lexer->current,
-        .lexeme = (StrView8){ .str = (u8 *)(lexer->input) + lexer->pos_start,
-                              .len = lexer->pos_current - lexer->pos_start + 1 },
-    };
-
-    /* Set value based on type */
-    if (type == TOKEN_NUM) {
-        // TODO: convert to number
-
-        char *lexeme[token.lexeme.len + 1];
-        memcpy(lexeme, token.lexeme.str, token.lexeme.len);
-        lexeme[token.lexeme.len] = 0;
-        token.num_value = atof((const char *)lexeme);
-    }
-
+    Token token = { .type = type,
+                    .start = lexer->start,
+                    .end = lexer->current,
+                    .lexeme = (Str8View){ .str = (u8 *)(lexer->input) + lexer->pos_start,
+                                          .len = lexer->pos_current - lexer->pos_start } };
     reset_token_ctx(lexer);
     return token;
 }
@@ -151,7 +112,7 @@ static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenType type)
 {
     Token token = emit(lexer, type);
     Str8 final = str_builder_end(sb);
-    token.str_list_idx = str_list_push(&lexer->str_list, final);
+    token.lexeme = final;
     return token;
 }
 
@@ -170,7 +131,7 @@ static bool is_valid_identifier(char c)
     return is_numeric(c) || is_alpha(c) || c == '_';
 }
 
-void lex_init(Lexer *lexer, char *input)
+void lex_init(Lexer *lexer, ErrorHandler *e, char *input)
 {
     *lexer = (Lexer){
         .input = input,
@@ -178,13 +139,8 @@ void lex_init(Lexer *lexer, char *input)
         .pos_current = 0,
         .start = (Point){ 0 },
         .current = (Point){ 0 },
-        //.str_list =
-        .n_errors = 0,
-        .err_head = NULL,
-        .err_tail = NULL,
+        .e = e,
     };
-
-    str_list_init(&lexer->str_list);
 }
 
 Token lex_peek(Arena *arena, Lexer *lexer)
@@ -204,82 +160,86 @@ Token lex_next(Arena *arena, Lexer *lexer)
         lexer->has_next = false;
         return lexer->next;
     }
-    while (1) {
-        char c = next(lexer);
-        switch (c) {
-        case EOF:
-            return (Token){ .type = TOKEN_EOF };
 
-        /* Whitespace */
-        case ' ':
-        case '\n':
-        case '\t':
-        case '\r':
-        case '\v':
-            reset_token_ctx(lexer);
-            break;
+    char c = next(lexer);
+    switch (c) {
+    case EOF:
+        return (Token){ .type = TOKEN_EOF };
 
-        /* Comments or slash (divide) */
-        case '/': {
-            if (match(lexer, '/')) {
-                return lex_comment(arena, lexer);
-            }
-            return emit(lexer, TOKEN_SLASH);
-            break;
-        };
+    /* Whitespace */
+    case ' ':
+    case '\n':
+    case '\t':
+    case '\r':
+    case '\v':
+        reset_token_ctx(lexer);
+        return lex_next(arena, lexer);
 
-        /* Strings */
-        case '"':
-            return lex_str(arena, lexer);
-
-        /* Single-character tokens */
-        case '+':
-            return emit(lexer, TOKEN_PLUS);
-        case '-':
-            return emit(lexer, TOKEN_MINUS);
-        case '*':
-            return emit(lexer, TOKEN_STAR);
-        case '(':
-            return emit(lexer, TOKEN_LPAREN);
-        case ')':
-            return emit(lexer, TOKEN_RPAREN);
-        case '[':
-            return emit(lexer, TOKEN_LBRACKET);
-        case ']':
-            return emit(lexer, TOKEN_RBRACKET);
-        case '=':
-            return emit(lexer, TOKEN_EQ);
-        case ',':
-            return emit(lexer, TOKEN_COMMA);
-
-        /* Single- or two-character tokens */
-        case '<':
-            return match(lexer, '<') ? emit(lexer, TOKEN_LSHIFT) : emit(lexer, TOKEN_LESS);
-        case '>':
-            return match(lexer, '>') ? emit(lexer, TOKEN_RSHIFT) : emit(lexer, TOKEN_GREATER);
-        case ':':
-            return match(lexer, '=') ? emit(lexer, TOKEN_ASSIGNMENT) : emit(lexer, TOKEN_COLON);
-        case '!': {
-            if (match(lexer, '=')) {
-                return emit(lexer, TOKEN_NEQ);
-            } else {
-                lex_error_append(arena, lexer, "Expected '=' after '!'");
-                return (Token){ .type = TOKEN_ERR };
-            }
-        };
-
-        default: {
-            if (is_numeric(c)) {
-                return lex_num(lexer);
-            }
-            if (!(is_alpha(c))) {
-                lex_error_append(arena, lexer, "Unrecognized character");
-                return (Token){ .type = TOKEN_ERR };
-            }
-            /* Reserved words and identifiers */
-            return lex_ident(arena, lexer);
+    /* Comments or slash (divide) */
+    case '/': {
+        if (match(lexer, '/')) {
+            return lex_comment(arena, lexer);
         }
+        return emit(lexer, TOKEN_SLASH);
+    };
+
+    /* Strings */
+    case '"':
+        return lex_str(arena, lexer);
+
+    /* Single-character tokens */
+    case '+':
+        return emit(lexer, TOKEN_PLUS);
+    case '-':
+        return emit(lexer, TOKEN_MINUS);
+    case '*':
+        return emit(lexer, TOKEN_STAR);
+    case '(':
+        return emit(lexer, TOKEN_LPAREN);
+    case ')':
+        return emit(lexer, TOKEN_RPAREN);
+    case '[':
+        return emit(lexer, TOKEN_LBRACKET);
+    case ']':
+        return emit(lexer, TOKEN_RBRACKET);
+    case '=':
+        return emit(lexer, TOKEN_EQ);
+    case '.':
+        return emit(lexer, TOKEN_DOT);
+    case ',':
+        return emit(lexer, TOKEN_COMMA);
+    case '&':
+        return emit(lexer, TOKEN_AMPERSAND);
+    case '^':
+        return emit(lexer, TOKEN_CARET);
+
+    /* Single- or two-character tokens */
+    case '<':
+        return match(lexer, '<') ? emit(lexer, TOKEN_LSHIFT) : emit(lexer, TOKEN_LESS);
+    case '>':
+        return match(lexer, '>') ? emit(lexer, TOKEN_RSHIFT) : emit(lexer, TOKEN_GREATER);
+    case ':':
+        return match(lexer, '=') ? emit(lexer, TOKEN_ASSIGNMENT) : emit(lexer, TOKEN_COLON);
+    case '!': {
+        if (match(lexer, '=')) {
+            return emit(lexer, TOKEN_NEQ);
+        } else {
+            error_lex(lexer->e, "Expected '=' afer '!'", lexer->start, lexer->current);
+            return (Token){ .type = TOKEN_ERR };
         }
+    };
+
+    default: {
+        if (is_numeric(c)) {
+            return lex_num(lexer);
+        }
+        if (!(is_alpha(c))) {
+            error_lex(lexer->e, "Unrecognized character", lexer->start, lexer->current);
+            return (Token){ .type = TOKEN_ERR };
+        }
+        /* Reserved words and identifiers */
+        return lex_ident(arena, lexer);
+    }
     }
 }
 
@@ -337,15 +297,17 @@ static Token lex_str(Arena *arena, Lexer *lexer)
     char c;
     while ((c = next(lexer)) != '"') {
         if (c == EOF || c == '\n') {
-            lex_error_append(arena, lexer, "Recieved newline or EOF inside string literal");
+            char *err_msg = "Recieved newline or EOF inside string literal";
+            error_lex(lexer->e, err_msg, lexer->start, lexer->current);
             return (Token){ .type = TOKEN_ERR };
         }
         if (c == '\\') {
             c = next(lexer);
             if (c != '"') {
-                lex_error_append(arena, lexer, "Unknown escape character inside string literal");
+                char *err_msg = "Unknown escape character inside string literal";
+                error_lex(lexer->e, err_msg, lexer->start, lexer->current);
                 had_error = true;
-                continue; // To gracefully recover
+                continue;
             }
         }
         str_builder_append_u8(&sb, (u8)c);
@@ -376,11 +338,11 @@ static Token lex_comment(Arena *arena, Lexer *lexer)
 
 /* Debug stuff */
 char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
-    "ERR",        "NUM",    "STR",    "COLON",    "ASSIGNMENT", "PLUS",  "MINUS",
-    "STAR",       "SLASH",  "LSHIFT", "RSHIFT",   "EQ",         "NEQ",   "LESS",
-    "GREATER",    "LPAREN", "RPAREN", "LBRACKET", "RBRACKET",   "COMMA", "EOF",
-    "IDENTIFIER", "FUNC",   "BEGIN",  "END",      "RETURN",     "PRINT", "BREAK",
-    "CONTINUE",   "IF",     "THEN",   "ELSE",     "WHILE",      "DO",    "VAR",
+    "ERR",        "NUM",      "STR",      "COLON", "ASSIGNMENT", "PLUS",      "MINUS",   "STAR",
+    "SLASH",      "LSHIFT",   "RSHIFT",   "EQ",    "NEQ",        "LESS",      "GREATER", "LPAREN",
+    "RPAREN",     "LBRACKET", "RBRACKET", "DOT",   "COMMA",      "AMPERSAND", "CARET",   "EOF",
+    "IDENTIFIER", "FUNC",     "STRUCT",   "ENUM",  "BEGIN",      "END",       "RETURN",  "PRINT",
+    "BREAK",      "CONTINUE", "IF",       "THEN",  "ELSE",       "WHILE",     "DO",      "VAR",
 };
 
 

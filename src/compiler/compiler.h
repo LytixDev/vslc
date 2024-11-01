@@ -18,17 +18,20 @@
 #define COMPILER_H
 
 #include "base/sac_single.h"
-#include "base/str.h"
-#include "base/types.h"
+#include "type.h"
 
-typedef struct {
-    bool had_error;
+typedef struct error_handler_t ErrorHandler; // forward decl from error.h
+
+
+typedef struct compiler_t {
     // For temporary data that ONLY needs to persist for the duration of a single compiler pass
     // Cleared before each pass.
     Arena *persist_arena;
     Arena *pass_arena;
 
-    Str8List str_list;
+    SymbolTable symt_root;
+
+    ErrorHandler *e;
 } Compiler;
 
 #endif /* COMPILER_H */
