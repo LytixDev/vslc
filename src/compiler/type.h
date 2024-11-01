@@ -26,6 +26,7 @@ typedef enum {
     TYPE_INTEGER = 0,
     TYPE_BOOL,
     TYPE_STRUCT,
+    TYPE_ENUM,
     TYPE_FUNC,
     TYPE_ARRAY,
     TYPE_POINTER,
@@ -65,6 +66,12 @@ typedef struct {
     u32 members_len;
     TypeInfoStructMember **members;
 } TypeInfoStruct;
+
+typedef struct {
+    TypeInfo info;
+    u32 members_len;
+    u32 *member_names;
+} TypeInfoEnum;
 
 typedef struct {
     TypeInfo info;

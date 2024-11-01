@@ -26,8 +26,8 @@
 
 
 char *reserved_words[] = {
-    "func",     "struct", "begin", "end",  "return", "print", "break",
-    "continue", "if",     "then",  "else", "while",  "do",    "var",
+    "func",     "struct", "enum", "begin", "end",   "return", "print", "break",
+    "continue", "if",     "then", "else",  "while", "do",     "var",
 };
 
 
@@ -355,8 +355,8 @@ char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
     "ERR",        "NUM",      "STR",      "COLON", "ASSIGNMENT", "PLUS",      "MINUS",   "STAR",
     "SLASH",      "LSHIFT",   "RSHIFT",   "EQ",    "NEQ",        "LESS",      "GREATER", "LPAREN",
     "RPAREN",     "LBRACKET", "RBRACKET", "DOT",   "COMMA",      "AMPERSAND", "CARET",   "EOF",
-    "IDENTIFIER", "FUNC",     "BEGIN",    "END",   "RETURN",     "PRINT",     "BREAK",   "CONTINUE",
-    "IF",         "THEN",     "ELSE",     "WHILE", "DO",         "VAR",
+    "IDENTIFIER", "FUNC",     "STRUCT",   "ENUM",  "BEGIN",      "END",       "RETURN",  "PRINT",
+    "BREAK",      "CONTINUE", "IF",       "THEN",  "ELSE",       "WHILE",     "DO",      "VAR",
 };
 
 

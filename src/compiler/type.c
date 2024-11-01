@@ -42,6 +42,9 @@ static void *make_type_info(Arena *arena, TypeInfoKind kind, u32 generated_by_na
     case TYPE_STRUCT:
         info = m_arena_alloc(arena, sizeof(TypeInfoStruct));
         break;
+    case TYPE_ENUM:
+        info = m_arena_alloc(arena, sizeof(TypeInfoEnum));
+        break;
     case TYPE_FUNC:
         info = m_arena_alloc(arena, sizeof(TypeInfoFunc));
         break;
@@ -56,7 +59,7 @@ static void *make_type_info(Arena *arena, TypeInfoKind kind, u32 generated_by_na
     };
 
     info->kind = kind;
-    info->is_resolved = false;
+    info->is_resolved = kind == TYPE_ENUM ? true : false; // Enums are always resolved
     info->generated_by_name = generated_by_name;
     return info;
 }
@@ -179,6 +182,20 @@ static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati)
     return type_info;
 }
 
+static TypeInfoEnum *enum_decl_to_type(Compiler *compiler, AstEnum *decl)
+{
+    Arena *arena = compiler->persist_arena;
+    TypeInfoEnum *t = make_type_info(arena, TYPE_ENUM, decl->name);
+    t->member_names = m_arena_alloc(arena, sizeof(u32) * decl->members.len);
+    t->members_len = decl->members.len;
+
+    for (u32 i = 0; i < decl->members.len; i++) {
+        TypedVar tv = decl->members.vars[i];
+        t->member_names[i] = tv.name;
+    }
+
+    return t;
+}
 
 static TypeInfoStruct *struct_decl_to_type(Compiler *compiler, AstStruct *decl)
 {
@@ -275,6 +292,18 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
         }
         putchar('}');
     } break;
+    case TYPE_ENUM: {
+        TypeInfoEnum *t = (TypeInfoEnum *)type_info;
+        printf("enum {");
+        for (u32 i = 0; i < t->members_len; i++) {
+            Str8 name = list.strs[t->member_names[i]];
+            printf("%s", name.str);
+            if (i != t->members_len - 1) {
+                printf(", ");
+            }
+        }
+        putchar('}');
+    }; break;
     case TYPE_FUNC: {
         TypeInfoFunc *t = (TypeInfoFunc *)type_info;
         // TODO: generated_by_name will not be set for arrays
@@ -478,6 +507,12 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     fill_builtin_types(compiler);
 
     /* Create symbols and types for global declarations */
+    for (AstListNode *node = root->enums.head; node != NULL; node = node->next) {
+        AstEnum *enum_decl = AS_ENUM(node->this);
+        TypeInfoEnum *t = enum_decl_to_type(compiler, enum_decl);
+        symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, enum_decl->name, (TypeInfo *)t,
+                     node->this);
+    }
     for (AstListNode *node = root->structs.head; node != NULL; node = node->next) {
         AstStruct *struct_decl = AS_STRUCT(node->this);
         TypeInfoStruct *t = struct_decl_to_type(compiler, struct_decl);
@@ -552,9 +587,9 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     find_cycles(compiler, tmp.arena, &graph);
     m_arena_tmp_release(tmp);
     /* If any cycles were found, early return */
-    // if (compiler->e->n_errors != 0) {
-    //     return;
-    // }
+    if (compiler->e->n_errors != 0) {
+        return;
+    }
 
     // Print symbols
     for (u32 i = 0; i < compiler->symt_root.sym_len; i++) {
@@ -566,7 +601,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         }
         // Print type
         // printf(" -> %d, is_resolved %d\n", sym->type_info->kind, sym->type_info->is_resolved);
-        printf("\t-> ");
+        printf("\t\t-> ");
         type_info_print(compiler->str_list, sym->type_info);
         putchar('\n');
     }

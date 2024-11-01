@@ -68,6 +68,7 @@ typedef enum {
     TOKEN_IDENTIFIER,
     TOKEN_FUNC,
     TOKEN_STRUCT,
+    TOKEN_ENUM,
     TOKEN_BEGIN,
     TOKEN_END,
     TOKEN_RETURN,

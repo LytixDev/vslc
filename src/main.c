@@ -56,8 +56,8 @@ u32 parser(char *input)
     }
 
 done:
+    // str_list_free(&res.str_list);
     error_handler_release(&e);
-    str_list_free(&res.str_list);
     m_arena_release(&arena);
     m_arena_release(&lex_arena);
     return e.n_errors;

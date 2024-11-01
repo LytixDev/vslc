@@ -77,6 +77,7 @@ typedef enum {
      */
     AST_FUNC = STMT_TYPE_LEN,
     AST_STRUCT,
+    AST_ENUM,
     AST_LIST,
     AST_NODE_VAR_LIST,
     AST_ROOT,
@@ -202,9 +203,16 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
+    u32 name; // Index into str_list
+    TypedVarList members; // Untyped
+} AstEnum;
+
+typedef struct {
+    AstNodeType type;
     AstList declarations; // AstTypedVarList
-    AstList structs; // AstStruct
     AstList functions; // AstFunction
+    AstList structs; // AstStruct
+    AstList enums; // AstEnum
 } AstRoot;
 
 
@@ -223,6 +231,7 @@ typedef struct {
 #define AS_NODE_VAR_LIST(___node) ((AstNodeVarList *)(___node))
 #define AS_FUNC(___node) ((AstFunc *)(___node))
 #define AS_STRUCT(___node) ((AstStruct *)(___node))
+#define AS_ENUM(___node) ((AstEnum *)(___node))
 #define AS_LIST(___node) ((AstList *)(___node))
 #define AS_ROOT(___node) ((AstRoot *)(___node))
 
@@ -245,11 +254,13 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt *body,
                        AstTypeInfo return_type);
 AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members);
+AstEnum *make_enum(Arena *arena, u32 name, TypedVarList values);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
 AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars);
-AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs);
+AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
+                   AstList enums);
 
 void ast_print(AstNode *head, Str8 *str_list, u32 indent);
 

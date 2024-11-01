@@ -429,7 +429,7 @@ static AstStmt *parse_stmt(Parser *parser)
     }
 }
 
-static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
+static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types, bool typed)
 {
     TypedVarList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, TypedVar), .len = 0 };
 
@@ -443,8 +443,11 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
             next_token(parser);
             indices_head = m_arena_alloc_struct(parser->arena, TypedVar);
         }
-        Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected type after ':'");
-        AstTypeInfo type_info = parse_type(parser, allow_array_types);
+        Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected variable name");
+        AstTypeInfo type_info = { 0 };
+        if (typed) {
+            type_info = parse_type(parser, allow_array_types);
+        }
         TypedVar new = { .name = identifier.str_list_idx, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
@@ -457,9 +460,9 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types)
 static TypedVarList parse_local_decl_list(Parser *parser)
 {
     /* Came from TOKEN_VAR */
-    TypedVarList identifiers = parse_variable_list(parser, false);
+    TypedVarList identifiers = parse_variable_list(parser, false, true);
     while (match_token(parser, TOKEN_VAR)) {
-        TypedVarList next_identifiers = parse_variable_list(parser, false);
+        TypedVarList next_identifiers = parse_variable_list(parser, false, true);
         /*
          * Since parse_variable_list ensures the identifiers are stored contigiously, and we do no
          * other allocations on the parser arena, consequetive retain this contigious property.
@@ -478,7 +481,7 @@ static AstFunc *parse_func(Parser *parser)
     consume_or_err(parser, TOKEN_LPAREN, "Expected '(' to start function parameter list");
     TypedVarList vars = { 0 };
     if (peek_token(parser).type != TOKEN_RPAREN) {
-        vars = parse_variable_list(parser, true);
+        vars = parse_variable_list(parser, true, true);
     }
     consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate function parameter list");
 
@@ -493,6 +496,7 @@ static AstRoot *parse_root(Parser *parser)
     AstList declarations = { .type = AST_LIST, .head = NULL, .tail = NULL };
     AstList functions = { .type = AST_LIST, .head = NULL, .tail = NULL };
     AstList structs = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList enums = { .type = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
     while ((next = next_token(parser)).type != TOKEN_EOF) {
@@ -509,7 +513,7 @@ static AstRoot *parse_root(Parser *parser)
         }; break;
         case TOKEN_VAR: {
             /* Parse global declarations list */
-            TypedVarList vars = parse_variable_list(parser, true);
+            TypedVarList vars = parse_variable_list(parser, true, true);
             AstNodeVarList *node_vars = make_node_var_list(parser->arena, vars);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
             if (declarations.head == NULL) {
@@ -522,7 +526,7 @@ static AstRoot *parse_root(Parser *parser)
         case TOKEN_STRUCT: {
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected struct name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after struct name");
-            TypedVarList members = parse_variable_list(parser, true);
+            TypedVarList members = parse_variable_list(parser, true, true);
             AstStruct *struct_decl = make_struct(parser->arena, name.str_list_idx, members);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
             if (structs.head == NULL) {
@@ -532,6 +536,19 @@ static AstRoot *parse_root(Parser *parser)
                 ast_list_push_back(&structs, node_node);
             }
         }; break;
+        case TOKEN_ENUM: {
+            Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected enum name");
+            consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after enum name");
+            TypedVarList values = parse_variable_list(parser, true, false);
+            AstEnum *enum_decl = make_enum(parser->arena, name.str_list_idx, values);
+            AstListNode *node_node = make_list_node(parser->arena, (AstNode *)enum_decl);
+            if (enums.head == NULL) {
+                enums.head = node_node;
+                enums.tail = enums.head;
+            } else {
+                ast_list_push_back(&enums, node_node);
+            }
+        }; break;
         default: {
             error_parse(parser->lexer.e, "Illegal first token. Expected var, struct or func", next);
             break;
@@ -539,7 +556,7 @@ static AstRoot *parse_root(Parser *parser)
         }
     }
 
-    return make_root(parser->arena, declarations, functions, structs);
+    return make_root(parser->arena, declarations, functions, structs, enums);
 }
 
 ParseResult parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)

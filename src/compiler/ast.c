@@ -20,12 +20,13 @@
 #include <stdio.h>
 
 char *node_type_str_map[AST_NODE_TYPE_LEN] = {
-    "EXPR_UNARY",        "EXPR_BINARY", "EXPR_LITERAL", "EXPR_CALL",
-
-    "STMT_WHILE",        "STMT_IF",     "STMT_ABRUPT",  "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
-    "STMT_BREAK_RETURN", "STMT_PRINT",  "STMT_EXPR",    "STMT_BLOCK",        "STMT_ASSIGNMENT",
-
-    "AST_FUNC",          "AST_STRUCT",  "AST_LIST",     "AST_NODE_VAR_LIST", "AST_ROOT",
+    "EXPR_UNARY",        "EXPR_BINARY",       "EXPR_LITERAL",
+    "EXPR_CALL",         "STMT_WHILE",        "STMT_IF",
+    "STMT_ABRUPT",       "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
+    "STMT_BREAK_RETURN", "STMT_PRINT",        "STMT_EXPR",
+    "STMT_BLOCK",        "STMT_ASSIGNMENT",   "AST_FUNC",
+    "AST_STRUCT",        "AST_ENUM",          "AST_LIST",
+    "AST_NODE_VAR_LIST", "AST_ROOT",
 };
 
 /* Expressions */
@@ -132,11 +133,20 @@ AstFunc *make_function(Arena *arena, u32 name, TypedVarList parameters, AstStmt 
 
 AstStruct *make_struct(Arena *arena, u32 name, TypedVarList members)
 {
-    AstStruct *func = m_arena_alloc(arena, sizeof(AstStruct));
-    func->type = AST_STRUCT;
-    func->name = name;
-    func->members = members;
-    return func;
+    AstStruct *struct_decl = m_arena_alloc(arena, sizeof(AstStruct));
+    struct_decl->type = AST_STRUCT;
+    struct_decl->name = name;
+    struct_decl->members = members;
+    return struct_decl;
+}
+
+AstEnum *make_enum(Arena *arena, u32 name, TypedVarList values)
+{
+    AstEnum *enum_decl = m_arena_alloc(arena, sizeof(AstEnum));
+    enum_decl->type = AST_ENUM;
+    enum_decl->name = name;
+    enum_decl->members = values;
+    return enum_decl;
 }
 
 AstListNode *make_list_node(Arena *arena, AstNode *this)
@@ -170,13 +180,15 @@ AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars)
     return node_var_list;
 }
 
-AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs)
+AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
+                   AstList enums)
 {
     AstRoot *root = m_arena_alloc(arena, sizeof(AstRoot));
     root->type = AST_ROOT;
     root->declarations = declarations;
     root->functions = functions;
     root->structs = structs;
+    root->enums = enums;
     return root;
 }
 
@@ -316,6 +328,7 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
         ast_print((AstNode *)(&root->declarations), str_list, indent + 1);
         ast_print((AstNode *)(&root->functions), str_list, indent + 1);
         ast_print((AstNode *)(&root->structs), str_list, indent + 1);
+        ast_print((AstNode *)(&root->enums), str_list, indent + 1);
     }; break;
     case AST_FUNC: {
         AstFunc *func = AS_FUNC(head);
@@ -329,6 +342,18 @@ void ast_print(AstNode *head, Str8 *str_list, u32 indent)
         printf("name=%s", str_list[struct_decl->name].str);
         printf(" members=");
         ast_print_typed_var_list(str_list, struct_decl->members);
+    }; break;
+    case AST_ENUM: {
+        AstEnum *enum_decl = AS_ENUM(head);
+        printf("name=%s", str_list[enum_decl->name].str);
+        printf(" values=");
+        for (u32 i = 0; i < enum_decl->members.len; i++) {
+            TypedVar var = enum_decl->members.vars[i];
+            printf("%s", str_list[var.name].str);
+            if (i != enum_decl->members.len - 1) {
+                printf(", ");
+            }
+        }
     }; break;
     case AST_LIST: {
         AstList *list = AS_LIST(head);
