@@ -213,7 +213,7 @@ static void ast_print_expr(AstExpr *head, Str8 *str_list, u32 indent)
     switch (head->type) {
     case EXPR_UNARY: {
         AstExprUnary *unary = AS_UNARY(head);
-        char *op_text_repr = node_type_str_map[unary->op];
+        char *op_text_repr = token_type_str_map[unary->op];
         printf("%s", op_text_repr);
         ast_print_expr(unary->expr, str_list, indent + 1);
     } break;

@@ -58,7 +58,10 @@ typedef enum {
     TOKEN_RPAREN,
     TOKEN_LBRACKET,
     TOKEN_RBRACKET,
+    TOKEN_DOT,
     TOKEN_COMMA,
+    TOKEN_AMPERSAND, // &
+    TOKEN_CARET, // ^
     TOKEN_EOF,
 
     // Identifier and reserved words

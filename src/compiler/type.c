@@ -48,6 +48,9 @@ static void *make_type_info(Arena *arena, TypeInfoKind kind, u32 generated_by_na
     case TYPE_ARRAY:
         info = m_arena_alloc(arena, sizeof(TypeInfoArray));
         break;
+    case TYPE_POINTER:
+        info = m_arena_alloc(arena, sizeof(TypeInfoPointer));
+        break;
     default:
         ASSERT_NOT_REACHED;
     };
@@ -145,24 +148,35 @@ static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati)
     //       declarations that generate types that aren't global.
     Str8 key = compiler->str_list.strs[ati.name];
     Symbol *sym = symt_find_sym(&compiler->symt_root, key);
+    /* Not found */
     if (sym == NULL) {
         return NULL;
     }
+    /* Symbol is not a type */
     if (sym->kind != SYMBOL_TYPE) {
         Str8 sym_name = compiler->str_list.strs[sym->name];
         error_sym(compiler->e, "Wants to be used as a type, but is in fact not :-(", sym_name);
         return NULL;
     }
     assert(sym->type_info != NULL);
-    if (ati.is_array == false) {
-        return sym->type_info;
-    }
 
-    TypeInfoArray *t = make_type_info(compiler->persist_arena, TYPE_ARRAY, 0);
-    t->elements = ati.elements;
-    t->element_type = sym->type_info;
-    t->info.is_resolved = true;
-    return (TypeInfo *)t;
+    // TODO: Instead of creating new types when we see pointers and arrays, maybe we can check if
+    //       they already exist and then reuse that?
+    TypeInfo *type_info = sym->type_info;
+    if (ati.is_pointer) {
+        TypeInfoPointer *t = make_type_info(compiler->persist_arena, TYPE_POINTER, sym->name);
+        t->pointer_to = type_info;
+        t->info.is_resolved = true;
+        type_info = (TypeInfo *)t;
+    }
+    if (ati.is_array) {
+        TypeInfoArray *t = make_type_info(compiler->persist_arena, TYPE_ARRAY, sym->name);
+        t->elements = ati.elements;
+        t->element_type = type_info;
+        t->info.is_resolved = true;
+        type_info = (TypeInfo *)t;
+    }
+    return type_info;
 }
 
 
@@ -228,7 +242,7 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
 /* --- PRINT --- */
 static void type_info_print(Str8List list, TypeInfo *type_info)
 {
-    printf("[%s] ", type_info->is_resolved ? "R" : "U");
+    // printf("[%s] ", type_info->is_resolved ? "R" : "U");
     switch (type_info->kind) {
     case TYPE_INTEGER: {
         TypeInfoInteger *t = (TypeInfoInteger *)type_info;
@@ -244,9 +258,10 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
             TypeInfoStructMember *member = t->members[i];
             Str8 name = list.strs[member->name];
             if (member->is_resolved) {
-                if (member->type->kind == TYPE_ARRAY) {
+                if (member->type->kind == TYPE_ARRAY || member->type->kind == TYPE_POINTER) {
                     printf("%s: ", name.str);
                     type_info_print(list, member->type);
+                    printf(", ");
                 } else {
                     u32 generated_by = member->type->generated_by_name;
                     Str8 s = list.strs[generated_by];
@@ -260,11 +275,6 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
         }
         putchar('}');
     } break;
-    case TYPE_ARRAY: {
-        TypeInfoArray *t = (TypeInfoArray *)type_info;
-        Str8 element_type_name = list.strs[t->info.generated_by_name];
-        printf("array %s[%d]", element_type_name.str, t->elements);
-    } break;
     case TYPE_FUNC: {
         TypeInfoFunc *t = (TypeInfoFunc *)type_info;
         // TODO: generated_by_name will not be set for arrays
@@ -276,6 +286,21 @@ static void type_info_print(Str8List list, TypeInfo *type_info)
             printf("%s: %s, ", name.str, type_name.str);
         }
         printf("]}");
+    } break;
+    case TYPE_ARRAY: {
+        TypeInfoArray *t = (TypeInfoArray *)type_info;
+        if (t->element_type->kind == TYPE_POINTER) {
+            type_info_print(list, t->element_type);
+        } else {
+            Str8 element_type_name = list.strs[t->info.generated_by_name];
+            printf("%s", element_type_name.str);
+        }
+        printf("[%d]", t->elements);
+    } break;
+    case TYPE_POINTER: {
+        TypeInfoPointer *t = (TypeInfoPointer *)type_info;
+        Str8 element_type_name = list.strs[t->info.generated_by_name];
+        printf("^%s", element_type_name.str);
     } break;
     default:
         break;
@@ -337,19 +362,20 @@ static void graph_add_edges_from_struct_type(Arena *arena, Graph *graph, TypeInf
 
     for (u32 i = 0; i < t->members_len; i++) {
         TypeInfoStructMember *m = t->members[i];
-        /* Only care about struct and array types */
-        if (!(m->type->kind == TYPE_STRUCT || m->type->kind == TYPE_ARRAY)) {
+        TypeInfoStruct *member_type;
+        /* Only care about arrays were the underlying type is a struct */
+        if (m->type->kind == TYPE_ARRAY) {
+            TypeInfoArray *member = (TypeInfoArray *)m->type;
+            if (member->element_type->kind != TYPE_STRUCT) {
+                continue;
+            }
+            member_type = (TypeInfoStruct *)member->element_type;
+        } else if (m->type->kind == TYPE_STRUCT) {
+            member_type = (TypeInfoStruct *)m->type;
+        } else {
             continue;
         }
 
-        TypeInfoStruct *member_type = (TypeInfoStruct *)m->type;
-        /* We are interested in arrays if the element type is a struct */
-        if (m->type->kind == TYPE_ARRAY) {
-            TypeInfoArray *member_as_array = (TypeInfoArray *)m->type;
-            if (member_as_array->element_type->kind == TYPE_STRUCT) {
-                member_type = (TypeInfoStruct *)member_as_array->element_type;
-            }
-        }
         u32 from = t->struct_id;
         u32 to = member_type->struct_id;
 
@@ -526,9 +552,9 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     find_cycles(compiler, tmp.arena, &graph);
     m_arena_tmp_release(tmp);
     /* If any cycles were found, early return */
-    if (compiler->e->n_errors != 0) {
-        return;
-    }
+    // if (compiler->e->n_errors != 0) {
+    //     return;
+    // }
 
     // Print symbols
     for (u32 i = 0; i < compiler->symt_root.sym_len; i++) {

@@ -42,10 +42,16 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     3, // TOKEN_GREATER,
     0, // TOKEN_LPAREN,
     0, // TOKEN_RPAREN,
-    0, // TOKEN_EOF,
+    0, // TOKEN_LBRACKET,
+    0, // TOKEN_RBRACKET,
+    15, // TOKEN_DOT,
     0, // TOKEN_COMMA,
+    0, // TOKEN_AMPERSAND,
+    0, // TOKEN_CARET,
+    0, // TOKEN_EOF,
     0, // TOKEN_IDENTIFIER,
     0, // TOKEN_FUNC,
+    0, // TOKEN_STRUCT,
     0, // TOKEN_BEGIN,
     0, // TOKEN_END,
     0, // TOKEN_RETURN,
@@ -105,6 +111,7 @@ static bool is_bin_op(Token token)
     case TOKEN_SLASH:
     case TOKEN_LSHIFT:
     case TOKEN_RSHIFT:
+    case TOKEN_DOT:
         return true;
     default:
         return false;
@@ -139,13 +146,16 @@ static Token consume_or_err(Parser *parser, TokenType expected, char *msg)
 static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
 {
     consume_or_err(parser, TOKEN_COLON, "Expected ':' after declaration to denote type");
+    bool is_pointer = match_token(parser, TOKEN_CARET);
     Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected typename after ':'");
     if (!match_token(parser, TOKEN_LBRACKET)) {
-        return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
+        return (
+            AstTypeInfo){ .name = name.str_list_idx, .is_pointer = is_pointer, .is_array = false };
     }
     if (!allow_array_types) {
         consume_or_err(parser, TOKEN_RBRACKET, "Global arrays are not allowed");
-        return (AstTypeInfo){ .name = name.str_list_idx, .is_array = false };
+        return (
+            AstTypeInfo){ .name = name.str_list_idx, .is_pointer = is_pointer, .is_array = false };
     }
 
     s32 elements = -1;
@@ -155,7 +165,9 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
         elements = peek.num_value;
     }
     consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate the array type");
-    return (AstTypeInfo){ .name = name.str_list_idx, .is_array = true, .elements = elements };
+    return (AstTypeInfo){
+        .name = name.str_list_idx, .is_pointer = is_pointer, .is_array = true, .elements = elements
+    };
 }
 
 static AstExprCall *parse_call(Parser *parser, Token identifier)
@@ -184,10 +196,13 @@ static AstExpr *parse_primary(Parser *parser)
         }
         return expr;
     }
+    /* Unary */
+    case TOKEN_STAR:
+    case TOKEN_AMPERSAND:
     case TOKEN_MINUS: {
-        /* Unary minus */
+        // TODO: RHS of address-of and dereference shouldn't be any expr
         AstExpr *expr = parse_expr(parser, 0);
-        return (AstExpr *)make_unary(parser->arena, expr, TOKEN_MINUS);
+        return (AstExpr *)make_unary(parser->arena, expr, token.type);
     }
     case TOKEN_NUM:
     case TOKEN_IDENTIFIER: {
@@ -212,6 +227,19 @@ static AstExpr *parse_primary(Parser *parser)
     }
 }
 
+static AstExprBinary *parse_member_access(Parser *parser, AstExpr *left)
+{
+    // NOTE: Temporary hack for LHS of assignment.
+    /* Came from '.' aka TOKEN_DOT */
+    Token ident = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected a struct member name");
+    AstExpr *right = (AstExpr *)make_literal(parser->arena, ident);
+    if (match_token(parser, TOKEN_DOT)) {
+        right = (AstExpr *)make_binary(parser->arena, left, TOKEN_DOT, right);
+        return parse_member_access(parser, right);
+    }
+    return make_binary(parser->arena, left, TOKEN_DOT, right);
+}
+
 static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 precedence)
 {
     Token next = peek_token(parser);
@@ -223,7 +251,14 @@ static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 p
         return left;
 
     next_token(parser);
-    AstExpr *right = parse_expr(parser, next_precedence);
+    AstExpr *right;
+    /* Struct member access is special because RHS must be an identifier */
+    if (next.type == TOKEN_DOT) {
+        Token ident = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected a struct member name");
+        right = (AstExpr *)make_literal(parser->arena, ident);
+    } else {
+        right = parse_expr(parser, next_precedence);
+    }
     return (AstExpr *)make_binary(parser->arena, left, next.type, right);
 }
 
@@ -361,18 +396,19 @@ static AstStmt *parse_stmt(Parser *parser)
             AstNode *call = (AstNode *)parse_call(parser, token);
             return (AstStmt *)make_single(parser->arena, STMT_EXPR, call);
         }
-
         next_token(parser);
         AstExpr *left = (AstExpr *)make_literal(parser->arena, token);
 
-        if (next.type == TOKEN_LBRACKET) {
+        if (next.type == TOKEN_DOT) {
+            left = (AstExpr *)parse_member_access(parser, left);
+            next = next_token(parser);
+        } else if (next.type == TOKEN_LBRACKET) {
             /* Assignment, left-hand side is an array indexing */
             AstExpr *right = parse_expr(parser, 0);
             consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate array indexing");
             left = (AstExpr *)make_binary(parser->arena, left, next.type, right);
             next = next_token(parser);
         }
-
         if (next.type != TOKEN_ASSIGNMENT) {
             error_parse(parser->lexer.e, "Expected assignment", next);
             return NULL;

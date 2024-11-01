@@ -45,6 +45,9 @@ u32 parser(char *input)
         goto done;
     }
 
+    ast_print((AstNode *)res.head, res.str_list.strs, 0);
+    putchar('\n');
+
     error_handler_reset(&e);
     Compiler compiler = { .persist_arena = &arena, .str_list = res.str_list, .e = &e };
     symbol_generate(&compiler, res.head);

@@ -26,8 +26,9 @@ typedef enum {
     TYPE_INTEGER = 0,
     TYPE_BOOL,
     TYPE_STRUCT,
-    TYPE_ARRAY,
     TYPE_FUNC,
+    TYPE_ARRAY,
+    TYPE_POINTER,
     TYPE_INFO_KIND_LEN
 } TypeInfoKind;
 
@@ -67,17 +68,22 @@ typedef struct {
 
 typedef struct {
     TypeInfo info;
+    u32 n_params;
+    u32 *param_names;
+    TypeInfo **param_types;
+    TypeInfo *return_type;
+} TypeInfoFunc;
+
+typedef struct {
+    TypeInfo info;
     TypeInfo *element_type;
     s32 elements; // -1 then array is dynamic
 } TypeInfoArray;
 
 typedef struct {
     TypeInfo info;
-    u32 n_params;
-    u32 *param_names;
-    TypeInfo **param_types;
-    TypeInfo *return_type;
-} TypeInfoFunc;
+    TypeInfo *pointer_to;
+} TypeInfoPointer;
 
 
 /* Symbol tuff */

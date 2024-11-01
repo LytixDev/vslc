@@ -23,6 +23,7 @@
 
 typedef struct {
     u32 name; // index into the str_list
+    bool is_pointer;
     bool is_array;
     s32 elements; // a -1 value means the array is dynamic
 } AstTypeInfo;

@@ -218,8 +218,14 @@ Token lex_next(Arena *arena, Lexer *lexer)
         return emit(lexer, TOKEN_RBRACKET);
     case '=':
         return emit(lexer, TOKEN_EQ);
+    case '.':
+        return emit(lexer, TOKEN_DOT);
     case ',':
         return emit(lexer, TOKEN_COMMA);
+    case '&':
+        return emit(lexer, TOKEN_AMPERSAND);
+    case '^':
+        return emit(lexer, TOKEN_CARET);
 
     /* Single- or two-character tokens */
     case '<':
@@ -346,11 +352,11 @@ static Token lex_comment(Arena *arena, Lexer *lexer)
 
 /* Debug stuff */
 char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
-    "ERR",        "NUM",    "STR",    "COLON",    "ASSIGNMENT", "PLUS",  "MINUS",
-    "STAR",       "SLASH",  "LSHIFT", "RSHIFT",   "EQ",         "NEQ",   "LESS",
-    "GREATER",    "LPAREN", "RPAREN", "LBRACKET", "RBRACKET",   "COMMA", "EOF",
-    "IDENTIFIER", "FUNC",   "BEGIN",  "END",      "RETURN",     "PRINT", "BREAK",
-    "CONTINUE",   "IF",     "THEN",   "ELSE",     "WHILE",      "DO",    "VAR",
+    "ERR",        "NUM",      "STR",      "COLON", "ASSIGNMENT", "PLUS",      "MINUS",   "STAR",
+    "SLASH",      "LSHIFT",   "RSHIFT",   "EQ",    "NEQ",        "LESS",      "GREATER", "LPAREN",
+    "RPAREN",     "LBRACKET", "RBRACKET", "DOT",   "COMMA",      "AMPERSAND", "CARET",   "EOF",
+    "IDENTIFIER", "FUNC",     "BEGIN",    "END",   "RETURN",     "PRINT",     "BREAK",   "CONTINUE",
+    "IF",         "THEN",     "ELSE",     "WHILE", "DO",         "VAR",
 };
 
 
