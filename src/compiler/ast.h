@@ -20,6 +20,8 @@
 #include "base/types.h"
 #include "lex.h"
 
+typedef struct symbol_t Symbol; // forward from type.h
+
 
 typedef struct {
     Str8 name;
@@ -31,12 +33,12 @@ typedef struct {
 typedef struct {
     Str8 name;
     AstTypeInfo ast_type_info;
-} TypedVar;
+} AstTypedVar;
 
 typedef struct {
-    TypedVar *vars; // contiguous array
+    AstTypedVar *vars; // contiguous array
     u32 len;
-} TypedVarList;
+} AstTypedVarList;
 
 
 /* Enums */
@@ -125,12 +127,14 @@ typedef struct {
     AstExprType type;
     LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
     Str8View literal; // Guranteed to be zero-terminated for STR and IDENT aka Str8
+    // TODO: Unsure if this is how we want it going forward.
+    Symbol *sym; // @NULLABLE. After type checking, each identifier is bound to a symbol
 } AstExprLiteral;
 
 typedef struct {
     AstExprType type;
     Str8 identifier;
-    AstNode *args; // @NULLABLE. type should either be Literal or List
+    AstNode *args; // @NULLABLE. List
 } AstExprCall;
 
 
@@ -167,7 +171,7 @@ typedef struct {
 
 typedef struct {
     AstStmtType type;
-    TypedVarList declarations;
+    AstTypedVarList declarations;
     AstList *stmts;
 } AstStmtBlock;
 
@@ -181,13 +185,13 @@ typedef struct {
 /* Nodes */
 typedef struct {
     AstNodeType type;
-    TypedVarList vars;
+    AstTypedVarList vars;
 } AstNodeVarList;
 
 typedef struct {
     AstNodeType type;
     Str8 name;
-    TypedVarList parameters;
+    AstTypedVarList parameters;
     AstTypeInfo return_type;
     AstStmt *body;
 } AstFunc;
@@ -195,13 +199,13 @@ typedef struct {
 typedef struct {
     AstNodeType type;
     Str8 name;
-    TypedVarList members;
+    AstTypedVarList members;
 } AstStruct;
 
 typedef struct {
     AstNodeType type;
     Str8 name;
-    TypedVarList members; // Untyped
+    AstTypedVarList members; // Untyped
 } AstEnum;
 
 typedef struct {
@@ -244,18 +248,18 @@ AstExprCall *make_call(Arena *arena, Str8 identifier, AstNode *args);
 AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
 AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
 AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
-AstStmtBlock *make_block(Arena *arena, TypedVarList declarations, AstList *statements);
+AstStmtBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *statements);
 AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
-AstFunc *make_function(Arena *arena, Str8 name, TypedVarList parameters, AstStmt *body,
+AstFunc *make_function(Arena *arena, Str8 name, AstTypedVarList parameters, AstStmt *body,
                        AstTypeInfo return_type);
-AstStruct *make_struct(Arena *arena, Str8 name, TypedVarList members);
-AstEnum *make_enum(Arena *arena, Str8 name, TypedVarList values);
+AstStruct *make_struct(Arena *arena, Str8 name, AstTypedVarList members);
+AstEnum *make_enum(Arena *arena, Str8 name, AstTypedVarList values);
 AstListNode *make_list_node(Arena *arena, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *arena, AstNode *head);
-AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars);
+AstNodeVarList *make_node_var_list(Arena *arena, AstTypedVarList vars);
 AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
                    AstList enums);
 

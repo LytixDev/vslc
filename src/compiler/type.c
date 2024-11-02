@@ -100,6 +100,7 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
     /* Create the new symbol */
     Symbol *sym = m_arena_alloc(compiler->persist_arena, sizeof(Symbol));
     sym->kind = kind;
+    sym->seq_no = symt->sym_len;
     sym->name = name;
     sym->type_info = type_info;
     sym->node = node;
@@ -116,7 +117,7 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
     symt->sym_len++;
 
     /* If symbol generated a type, ensure space in type table and add new type */
-    if (type_info != NULL) {
+    if (kind == SYMBOL_TYPE || kind == SYMBOL_FUNC) {
         if (type_info->kind == TYPE_STRUCT) {
             ((TypeInfoStruct *)type_info)->struct_id = symt->struct_count;
             symt->struct_count++;
@@ -144,7 +145,7 @@ static Symbol *symt_find_sym(SymbolTable *symt, Str8 key)
     return sym;
 }
 
-static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati)
+static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati, bool err_if_not_resolved)
 {
     // NOTE: This function uses the root symbol table. Okay as of now since we don't allow
     //       declarations that generate types that aren't global.
@@ -152,11 +153,13 @@ static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati)
     Symbol *sym = symt_find_sym(&compiler->symt_root, sym_name);
     /* Not found */
     if (sym == NULL) {
+        if (err_if_not_resolved) {
+            error_sym(compiler->e, "Type not found", sym_name);
+        }
         return NULL;
     }
     /* Symbol is not a type */
     if (sym->kind != SYMBOL_TYPE) {
-        // Str8 sym_name = sym->name;
         error_sym(compiler->e, "Wants to be used as a type, but is in fact not :-(", sym_name);
         return NULL;
     }
@@ -189,7 +192,7 @@ static TypeInfoEnum *enum_decl_to_type(Compiler *compiler, AstEnum *decl)
     t->members_len = decl->members.len;
 
     for (u32 i = 0; i < decl->members.len; i++) {
-        TypedVar tv = decl->members.vars[i];
+        AstTypedVar tv = decl->members.vars[i];
         t->member_names[i] = tv.name;
     }
 
@@ -205,14 +208,14 @@ static TypeInfoStruct *struct_decl_to_type(Compiler *compiler, AstStruct *decl)
     t->info.is_resolved = true;
 
     for (u32 i = 0; i < decl->members.len; i++) {
-        TypedVar tv = decl->members.vars[i];
+        AstTypedVar tv = decl->members.vars[i];
         TypeInfoStructMember *member = m_arena_alloc(arena, sizeof(TypeInfoStructMember));
         t->members[i] = member;
         member->is_resolved = false;
         member->name = tv.name;
         member->ati = tv.ast_type_info;
 
-        TypeInfo *member_t = ast_type_resolve(compiler, tv.ast_type_info);
+        TypeInfo *member_t = ast_type_resolve(compiler, tv.ast_type_info, false);
         if (member_t != NULL) {
             member->is_resolved = true;
             member->type = member_t;
@@ -236,16 +239,16 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
     t->param_types = m_arena_alloc(compiler->persist_arena, sizeof(TypeInfo *) * t->n_params);
     t->info.is_resolved = true;
 
-    TypeInfo *return_type = ast_type_resolve(compiler, decl->return_type);
+    TypeInfo *return_type = ast_type_resolve(compiler, decl->return_type, true);
     t->return_type = return_type;
     if (return_type == NULL) {
         t->info.is_resolved = false;
     }
 
     for (u32 i = 0; i < decl->parameters.len; i++) {
-        TypedVar tv = decl->parameters.vars[i];
+        AstTypedVar tv = decl->parameters.vars[i];
         t->param_names[i] = tv.name;
-        TypeInfo *param_t = ast_type_resolve(compiler, tv.ast_type_info);
+        TypeInfo *param_t = ast_type_resolve(compiler, tv.ast_type_info, true);
         if (param_t == NULL) {
             t->info.is_resolved = false;
         }
@@ -255,7 +258,139 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
     return t;
 }
 
+static void bind_expr(Compiler *compiler, SymbolTable *symt, AstExpr *head)
+{
+    switch (head->type) {
+    case EXPR_UNARY:
+        bind_expr(compiler, symt, AS_UNARY(head)->expr);
+        break;
+    case EXPR_BINARY:
+        bind_expr(compiler, symt, AS_BINARY(head)->left);
+        bind_expr(compiler, symt, AS_BINARY(head)->right);
+        break;
+    case EXPR_LITERAL: {
+        AstExprLiteral *lit = AS_LITERAL(head);
+        if (lit->lit_type != LIT_IDENT) {
+            return;
+        }
+        Symbol *sym = symt_find_sym(symt, lit->literal);
+        if (sym == NULL) {
+            error_sym(compiler->e, "Variable never declared", lit->literal);
+        }
+        lit->sym = sym;
+    } break;
+    case EXPR_CALL: {
+        AstExprCall *call = AS_CALL(head);
+        if ((u32)call->args->type == (u32)EXPR_LITERAL) {
+            bind_expr(compiler, symt, (AstExpr *)call->args);
+        } else {
+            AstList *args = (AstList *)call->args;
+            for (AstListNode *node = args->head; node != NULL; node = node->next) {
+                bind_expr(compiler, symt, (AstExpr *)node->this);
+            }
+        }
+    } break;
+    default:
+        ASSERT_NOT_REACHED;
+    }
+}
+
+static void bind_stmt(Compiler *compiler, SymbolTable *symt, AstStmt *head)
+{
+    switch (head->type) {
+    case STMT_WHILE:
+        bind_expr(compiler, symt, AS_WHILE(head)->condition);
+        bind_stmt(compiler, symt, AS_WHILE(head)->body);
+        break;
+    case STMT_IF:
+        bind_expr(compiler, symt, AS_IF(head)->condition);
+        bind_stmt(compiler, symt, AS_IF(head)->then);
+        bind_stmt(compiler, symt, AS_IF(head)->else_);
+        break;
+    case STMT_ABRUPT_BREAK:
+    case STMT_ABRUPT_CONTINUE:
+    case STMT_ABRUPT_RETURN:
+    case STMT_EXPR: {
+        AstStmtSingle *stmt = AS_SINGLE(head);
+        if (stmt->node) {
+            bind_expr(compiler, symt, (AstExpr *)stmt->node);
+        }
+    }; break;
+    case STMT_PRINT: {
+        AstStmtSingle *stmt = AS_SINGLE(head);
+        if ((u32)stmt->node->type == (u32)EXPR_LITERAL) {
+            bind_expr(compiler, symt, (AstExpr *)stmt->node);
+        } else {
+            AstList *args = (AstList *)stmt->node;
+            for (AstListNode *node = args->head; node != NULL; node = node->next) {
+                bind_expr(compiler, symt, (AstExpr *)node->this);
+            }
+        }
+    }; break;
+    case STMT_BLOCK: {
+        AstStmtBlock *stmt = AS_BLOCK(head);
+        // TODO: blocks create new scopes
+        /* Create symbols for declarations */
+        for (u32 i = 0; i < stmt->declarations.len; i++) {
+            AstTypedVar param = stmt->declarations.vars[i];
+            TypeInfo *param_type = ast_type_resolve(compiler, param.ast_type_info, true);
+            symt_new_sym(compiler, symt, SYMBOL_LOCAL_VAR, param.name, param_type, (AstNode *)stmt);
+        }
+        for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {
+            bind_stmt(compiler, symt, (AstStmt *)node->this);
+        }
+    }; break;
+    case STMT_ASSIGNMENT:
+        bind_expr(compiler, symt, AS_ASSIGNMENT(head)->left);
+        bind_expr(compiler, symt, AS_ASSIGNMENT(head)->right);
+        break;
+    default:
+        ASSERT_NOT_REACHED;
+    }
+}
+
+static void bind_function(Compiler *compiler, AstFunc *func)
+{
+    Symbol *func_sym = symt_find_sym(&compiler->symt_root, func->name);
+    assert(func_sym != NULL && "Could not find symbol for function in bind_and_check!?!?");
+
+    /* Create symbols for function parameters */
+    for (u32 i = 0; i < func->parameters.len; i++) {
+        AstTypedVar param = func->parameters.vars[i];
+        TypeInfo *param_type = ast_type_resolve(compiler, param.ast_type_info, true);
+        symt_new_sym(compiler, &func_sym->function_symtable, SYMBOL_PARAM, param.name, param_type,
+                     (AstNode *)func);
+    }
+
+    bind_stmt(compiler, &func_sym->function_symtable, func->body);
+}
+
 /* --- PRINT --- */
+static void symt_print(SymbolTable symt)
+{
+    for (u32 i = 0; i < symt.sym_len; i++) {
+        Symbol *sym = symt.symbols[i];
+        TypeInfo *sym_type = sym->type_info;
+        if (sym_type == NULL) {
+            printf("[T%d:no%d] - %s\n", sym->kind, sym->seq_no, sym->name.str);
+        } else {
+            bool is_ptr = sym_type->kind == TYPE_POINTER;
+            bool is_array = false;
+            if (sym_type->kind == TYPE_ARRAY) {
+                is_array = true;
+                is_ptr = ((TypeInfoArray *)sym_type)->element_type->kind == TYPE_POINTER;
+            }
+            printf("[T%d:no%d] - %s: %s%s%s\n", sym->kind, sym->seq_no, sym->name.str,
+                   is_ptr ? "^" : "", sym_type->generated_by_name.str, is_array ? "[]" : "");
+        }
+        if (sym->kind == SYMBOL_FUNC) {
+            printf("func syms:\n");
+            symt_print(sym->function_symtable);
+            putchar('\n');
+        }
+    }
+}
+
 static void type_info_print(TypeInfo *type_info)
 {
     printf("[%s] ", type_info->is_resolved ? "R" : "U");
@@ -521,15 +656,15 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         symt_new_sym(compiler, &compiler->symt_root, SYMBOL_FUNC, func_decl->name, (TypeInfo *)t,
                      node->this);
     }
-    /*
     for (AstListNode *node = root->declarations.head; node != NULL; node = node->next) {
-        TypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
+        AstTypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
         for (u32 i = 0; i < vars.len; i++) {
-            symbol_table_add(compiler, &sym_table_root, SYMBOL_GLOBAL_VAR, vars.vars[i].identifier,
-    node->this);
+            AstTypedVar typed_var = vars.vars[i];
+            TypeInfo *t = ast_type_resolve(compiler, typed_var.ast_type_info, true);
+            symt_new_sym(compiler, &compiler->symt_root, SYMBOL_GLOBAL_VAR, typed_var.name,
+                         (TypeInfo *)t, node->this);
         }
     }
-    */
 
     /* Resolve all unsresolved types */
     for (u32 i = 0; i < compiler->symt_root.type_len; i++) {
@@ -553,7 +688,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
             if (m->is_resolved) {
                 continue;
             }
-            TypeInfo *m_t = ast_type_resolve(compiler, m->ati);
+            TypeInfo *m_t = ast_type_resolve(compiler, m->ati, false);
             if (m_t == NULL) {
                 error_sym(compiler->e, "Type of struct member is never declared", m->ati.name);
                 t_struct->info.is_resolved = false;
@@ -577,7 +712,6 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
             graph_add_edges_from_struct_type(tmp.arena, &graph, (TypeInfoStruct *)t);
         }
     }
-
     find_cycles(compiler, tmp.arena, &graph);
     m_arena_tmp_release(tmp);
     /* If any cycles were found, early return */
@@ -585,6 +719,14 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         return;
     }
 
+    /* Symbol gen and typecheck */
+    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
+        bind_function(compiler, AS_FUNC(node->this));
+    }
+
+    symt_print(compiler->symt_root);
+
+    /*
     // Print symbols
     for (u32 i = 0; i < compiler->symt_root.sym_len; i++) {
         Symbol *sym = compiler->symt_root.symbols[i];
@@ -599,4 +741,5 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         type_info_print(sym->type_info);
         putchar('\n');
     }
+    */
 }

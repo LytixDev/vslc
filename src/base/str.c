@@ -24,6 +24,36 @@
 #include "types.h"
 
 
+u32 str_view_to_u32(Str8View view, bool *success)
+{
+    char buf[32];
+    if (view.len >= sizeof(buf)) {
+        if (success != NULL) {
+            *success = false;
+        }
+        return 0;
+    }
+
+    memcpy(buf, view.str, view.len);
+    buf[view.len] = 0;
+
+    char *endptr;
+    unsigned long result = strtoul(buf, &endptr, 10);
+
+    /* Check for conversion errors */
+    if (endptr == buf || *endptr != 0 || result > UINT32_MAX) {
+        if (success) {
+            *success = false;
+        }
+        return 0;
+    }
+
+    if (success) {
+        *success = true;
+    }
+    return (u32)result;
+}
+
 Str8Builder make_str_builder(Arena *arena)
 {
     Str8Builder sb = {

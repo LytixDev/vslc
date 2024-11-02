@@ -46,15 +46,16 @@ u32 run(char *input)
         goto done;
     }
 
-    ast_print((AstNode *)ast_root, 0);
-    putchar('\n');
-
     error_handler_reset(&e);
     Compiler compiler = { .persist_arena = &arena, .e = &e };
     symbol_generate(&compiler, ast_root);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
         printf("%s\n", err->msg.str);
     }
+
+    ast_print((AstNode *)ast_root, 0);
+    putchar('\n');
+
 done:
     error_handler_release(&e);
     m_arena_release(&arena);

@@ -127,6 +127,7 @@ struct symbol_table_t {
 
 struct symbol_t {
     SymbolKind kind;
+    u32 seq_no; // Sequence number in the symbol table this symbol belongs to
     Str8 name;
     TypeInfo *type_info; // @NULLABLE
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
@@ -134,77 +135,6 @@ struct symbol_t {
 };
 
 
-// void symbol_table_init(SymbolTable *table, HashMap *parent);
-
 void symbol_generate(Compiler *compiler, AstRoot *root);
 
-
-/*
- * 1. Create symbol table
- * 2. Add all default types (s32, f32, ...) as types and symbols
- * 3. Find all global symbols, mostly interested in the types here.
- *    While doing this, check for collisions and report any potential errors.
- *
- * 4. Resolve all types. Check for circular dependencies in struct.
- *
- *
- * 5. Iteratively create new low-level AST:
- *     >Get rid of token information
- *     >Bind correct symbols to the nodes.
- *    Traverse the symbols in the table.
- *    When encountering a function:
- *     >go into it
- *     >generate local symbols
- *     >bind correct types.
- *   While doing this, check if each function call and type bound exists, and report potential errs.
- *   OBS: Can deduce here if call is actually a struct initialization
- *
- * Will be left with a lower-level IR where every Type is bound to its correct symbol.
- * >Function declarations will have the symbol it generates connected to it and the types
- *  return type and parameter has.
- * >Function calls will point to the symbol of the function it calls.
- *
- * >Struct declarations will have the Type it generates as well as pointers to the type of its
- *   members.
- * >Var declarations (local and global) will point the Type symbol it has.
- *
- *
- * 6. Typecheck !
- *
- * Test:
- * --------------------------------------------------------
-    struct Pair :: a: s32, b: bool      // Generates Pair
-
-    func foo(a: s32, b: bool): Pair     // Generates foo
-    begin
-        var pair: Pair
-        pair := Pair(a, b)
-        return pair
-    end
-
-    func main(): s32                    // Generates main
-    begin
-        var a: s32, b: Pair
-        a := 10
-        b := foo(a, true)
-    end
- * --------------------------------------------------------
- *  1. [], []
- *
- *  2. [s32, bool], [{int, 32}, {bool}]
- *
- *  3. [s32, bool, Pair, foo, main],
- *     [{int, 32}, {bool}, {struct, [a: s32, b: bool]},
- *      {func, [a: s32, b: bool], Pair}, {func, [], s32}]
- *
- *  5. [s32, bool, Pair, foo, main, a, b, pair, a]
- *     [{int, 32}, {bool}, {struct, [a: s32, b: bool]},
- *      {func, [a: s32, b: bool], Pair}, {func, [], s32}]
- *
- *
-Statically check:
->no circular dependencies: struct Foo <-> struct Bar
->do not attempt to use variable or call func which does not exist
->do not have two funcs or two vars in the same scope with same name
- */
 #endif /* TYPE_H */
