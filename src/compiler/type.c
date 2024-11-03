@@ -100,6 +100,23 @@ static SymbolTable make_symt(SymbolTable *parent)
     return symt;
 }
 
+static bool sym_generates_type(Symbol *sym)
+{
+    /* Functions, structs and enums have local symbol tables */
+    TypeInfo *type_info = sym->type_info;
+    if (type_info == NULL) {
+        return false;
+    }
+    if (sym->kind == SYMBOL_FUNC) {
+        return true;
+    }
+    if (sym->kind == SYMBOL_TYPE &&
+        (type_info->kind == TYPE_ENUM || type_info->kind == TYPE_STRUCT)) {
+        return true;
+    }
+    return false;
+}
+
 static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind kind, Str8 name,
                             TypeInfo *type_info, AstNode *node)
 {
@@ -120,8 +137,12 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
     sym->name = name;
     sym->type_info = type_info;
     sym->node = node;
-    if (kind == SYMBOL_FUNC) {
+    if (sym_generates_type(sym)) {
         sym->symt_local = make_symt(symt);
+        /* Structs and enums have completely isolated scopes */
+        if (type_info->kind == TYPE_STRUCT || type_info->kind == TYPE_ENUM) {
+            sym->symt_local.parent = NULL;
+        }
     }
 
     /* Ensure space in the symbol table and add the new symbol */
@@ -133,7 +154,7 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
     symt->sym_len++;
 
     /* If symbol generated a type, ensure space in type table and add new type */
-    if (kind == SYMBOL_TYPE || kind == SYMBOL_FUNC) {
+    if (sym_generates_type(sym)) {
         if (type_info->kind == TYPE_STRUCT) {
             ((TypeInfoStruct *)type_info)->struct_id = symt->struct_count;
             symt->struct_count++;
@@ -204,25 +225,28 @@ static void enum_decl_to_type(Compiler *compiler, AstEnum *decl)
 {
     Arena *arena = compiler->persist_arena;
     TypeInfoEnum *t = make_type_info(arena, TYPE_ENUM, decl->name);
-    symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, decl->name, (TypeInfo *)t,
-                 (AstNode *)decl);
+    Symbol *sym = symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, decl->name,
+                               (TypeInfo *)t, (AstNode *)decl);
+    SymbolTable *symt_local = &sym->symt_local;
 
     t->member_names = m_arena_alloc(arena, sizeof(Str8) * decl->members.len);
     t->members_len = decl->members.len;
-
     for (u32 i = 0; i < decl->members.len; i++) {
         AstTypedVar tv = decl->members.vars[i];
         t->member_names[i] = tv.name;
+        symt_new_sym(compiler, symt_local, SYMBOL_MEMBER, tv.name, (TypeInfo *)t, (AstNode *)decl);
     }
 }
 
-static TypeInfoStruct *struct_decl_to_type(Compiler *compiler, AstStruct *decl)
+static void struct_decl_to_type(Compiler *compiler, AstStruct *decl)
 {
     Arena *arena = compiler->persist_arena;
     TypeInfoStruct *t = make_type_info(arena, TYPE_STRUCT, decl->name);
+    symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, decl->name, (TypeInfo *)t,
+                 (AstNode *)decl);
+
     t->members = m_arena_alloc(arena, sizeof(TypeInfoStructMember *) * decl->members.len);
     t->members_len = decl->members.len;
-    t->info.is_resolved = true;
 
     for (u32 i = 0; i < decl->members.len; i++) {
         AstTypedVar tv = decl->members.vars[i];
@@ -238,19 +262,13 @@ static TypeInfoStruct *struct_decl_to_type(Compiler *compiler, AstStruct *decl)
             member->type = member_t;
         }
     }
-
-    for (u32 i = 0; i < t->members_len; i++) {
-        if (!t->members[i]->is_resolved) {
-            t->info.is_resolved = false;
-            break;
-        }
-    }
-    return t;
 }
 
-static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
+static void func_decl_to_type(Compiler *compiler, AstFunc *decl)
 {
     TypeInfoFunc *t = make_type_info(compiler->persist_arena, TYPE_FUNC, decl->name);
+    symt_new_sym(compiler, &compiler->symt_root, SYMBOL_FUNC, decl->name, (TypeInfo *)t,
+                 (AstNode *)decl);
     t->n_params = decl->parameters.len;
     t->param_names = m_arena_alloc(compiler->persist_arena, sizeof(Str8) * t->n_params);
     t->param_types = m_arena_alloc(compiler->persist_arena, sizeof(TypeInfo *) * t->n_params);
@@ -271,8 +289,6 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
         }
         t->param_types[i] = param_t;
     }
-
-    return t;
 }
 
 static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
@@ -283,21 +299,20 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head
         break;
     case EXPR_BINARY: {
         AstExprBinary *expr = AS_BINARY(head);
-        bind_expr(compiler, symt_local, AS_BINARY(head)->left);
-        // TODO: RHS of struct member access will not be bound? Need to iron this one out.
-        //       same for enum mmeber access
+        bind_expr(compiler, symt_local, expr->left);
+        /* Member access are bound in after typechecking */
         if (expr->op != TOKEN_DOT) {
-            bind_expr(compiler, symt_local, AS_BINARY(head)->right);
+            bind_expr(compiler, symt_local, expr->right);
         }
     } break;
     case EXPR_LITERAL: {
         AstExprLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type != LIT_IDENT) {
-            return;
+            break;
         }
         Symbol *sym = symt_find_sym(symt_local, lit->literal);
         if (sym == NULL) {
-            error_sym(compiler->e, "Variable never declared", lit->literal);
+            error_sym(compiler->e, "Symbol never declared", lit->literal);
         }
         lit->sym = sym;
     } break;
@@ -405,23 +420,44 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
             tp->info.is_resolved = true;
             tp->pointer_to = t;
             return (TypeInfo *)tp;
+        } else if (expr->op == TOKEN_STAR) {
+            if (t->kind != TYPE_POINTER) {
+                error_node(compiler->e, "Can not dereference x", (AstNode *)head);
+            } else {
+                return ((TypeInfoPointer *)t)->pointer_to;
+            }
         } else {
             return t;
         }
     }; break;
     case EXPR_BINARY: {
         AstExprBinary *expr = AS_BINARY(head);
-        // TODO: some binary ops have a limited number of types that are allowed
-        //       f.ex. we don't allow addition of structs
         TypeInfo *left = typecheck_expr(compiler, symt_local, expr->left);
-        // TODO: same as in bind_expr. Need to iron this one out.
+        /* Member access */
         if (expr->op == TOKEN_DOT) {
-            return left;
+            if (!(left->kind == TYPE_STRUCT || left->kind == TYPE_ENUM)) {
+                error_typecheck_binary(compiler->e, "Has no members", (AstNode *)head, left, left);
+                return left;
+            }
+            /*
+             * For member accesses, the RHS could not be bound before we knew the type of the LHS,
+             * meaning we have to bind it now. If bind_expr fails, an error is generated. We don't
+             * need to check the type of the RHS since struct and enum scopes are isolated, meaning
+             * if bind_expr succeeds, it has been bound to the correct type, and we shall return
+             * this type.
+             */
+            Symbol *type_sym = symt_find_sym(symt_local, left->generated_by_name);
+            bind_expr(compiler, &type_sym->symt_local, expr->right);
+            return typecheck_expr(compiler, &type_sym->symt_local, expr->right);
         }
+
         TypeInfo *right = typecheck_expr(compiler, symt_local, expr->right);
         if (!type_info_equal(left, right)) {
             error_typecheck_binary(compiler->e, "bin", (AstNode *)head, left, right);
         }
+
+        // TODO: some binary ops have a limited number of types that are allowed
+        //       f.ex. we don't allow addition of structs
         return left;
     } break;
     case EXPR_LITERAL: {
@@ -437,8 +473,32 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         AstExprCall *call = AS_CALL(head);
         Symbol *sym = symt_find_sym(symt_local, call->identifier);
         TypeInfoFunc *callee = (TypeInfoFunc *)sym->type_info;
+        /* Check that enough args were supplied */
+        if (call->args == NULL && callee->n_params != 0) {
+            error_node(compiler->e, "Expected n args, but got 0", (AstNode *)call);
+            return callee->return_type;
+        }
+        AstList *args = (AstList *)call->args;
+        u32 n_args = 0;
+        for (AstListNode *node = args->head; node != NULL; node = node->next) {
+            n_args += 1;
+        }
+        if (n_args != callee->n_params) {
+            error_node(compiler->e, "Expected x args, but got y", (AstNode *)head);
+            return callee->return_type;
+        }
+        /* Typecheck params vs args */
+        u32 i = 0;
+        for (AstListNode *node = args->head; node != NULL; node = node->next) {
+            TypeInfo *t_arg = typecheck_expr(compiler, symt_local, (AstExpr *)node->this);
+            TypeInfo *t_param = callee->param_types[i];
+            if (!type_info_equal(t_arg, t_param)) {
+                error_typecheck_binary(compiler->e, "Argument mismatch", (AstNode *)head, t_arg,
+                                       t_param);
+            }
+            i += 1;
+        }
         return callee->return_type;
-        // TODO: Typecheck params vs args of function
     } break;
     default:
         ASSERT_NOT_REACHED;
@@ -513,8 +573,8 @@ static void symt_print(SymbolTable symt)
             printf("[T%d:no%d] - %s: %s%s%s\n", sym->kind, sym->seq_no, sym->name.str,
                    is_ptr ? "^" : "", sym_type->generated_by_name.str, is_array ? "[]" : "");
         }
-        if (sym->kind == SYMBOL_FUNC) {
-            printf("func syms:\n");
+        if (sym_generates_type(sym)) {
+            printf("local syms:\n");
             symt_print(sym->symt_local);
             putchar('\n');
         }
@@ -773,15 +833,11 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     }
     for (AstListNode *node = root->structs.head; node != NULL; node = node->next) {
         AstStruct *struct_decl = AS_STRUCT(node->this);
-        TypeInfoStruct *t = struct_decl_to_type(compiler, struct_decl);
-        symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, struct_decl->name, (TypeInfo *)t,
-                     node->this);
+        struct_decl_to_type(compiler, struct_decl);
     }
     for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
         AstFunc *func_decl = AS_FUNC(node->this);
-        TypeInfoFunc *t = func_decl_to_type(compiler, func_decl);
-        symt_new_sym(compiler, &compiler->symt_root, SYMBOL_FUNC, func_decl->name, (TypeInfo *)t,
-                     node->this);
+        func_decl_to_type(compiler, func_decl);
     }
     for (AstListNode *node = root->declarations.head; node != NULL; node = node->next) {
         AstTypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
@@ -799,9 +855,9 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         if (t->is_resolved) {
             continue;
         }
+
         /*
-         * Right now, everything other than struct member will be wholly resolved if the type it
-         * references exists.
+         * Right now, everything other than structs should be wholly resolved
          */
         if (t->kind != TYPE_STRUCT) {
             error_sym(compiler->e, "A type used here is not declared", t->generated_by_name);
@@ -823,6 +879,19 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
             }
             m->type = m_t;
             m->is_resolved = true;
+        }
+        /* Error case */
+        if (t_struct->info.is_resolved == false) {
+            continue;
+        }
+
+        /* Generate symbols for struct members */
+        Symbol *struct_sym = symt_find_sym(&compiler->symt_root, t_struct->info.generated_by_name);
+        assert(struct_sym && struct_sym->type_info && struct_sym->type_info->kind == TYPE_STRUCT);
+        for (u32 j = 0; j < t_struct->members_len; j++) {
+            TypeInfoStructMember *m = t_struct->members[j];
+            // TODO: set node
+            symt_new_sym(compiler, &struct_sym->symt_local, SYMBOL_MEMBER, m->name, m->type, NULL);
         }
     }
     /* Early return if any types are unresolved */
@@ -846,7 +915,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         return;
     }
 
-    /* Symbol gen */
+    /* Bind symbols */
     for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
         bind_function(compiler, AS_FUNC(node->this));
     }
@@ -862,7 +931,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         typecheck_stmt(compiler, &func_sym->symt_local, (TypeInfoFunc *)func_sym->type_info,
                        func->body);
     }
-    // symt_print(compiler->symt_root);
+    symt_print(compiler->symt_root);
 
     /*
     // Print symbols

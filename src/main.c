@@ -36,7 +36,7 @@ u32 run(char *input)
     m_arena_init_dynamic(&lex_arena, 1, 512);
 
     ErrorHandler e;
-    error_handler_init(&e, input, "test.vsl");
+    error_handler_init(&e, input, "test.meta");
 
     AstRoot *ast_root = parse(&arena, &lex_arena, &e, input);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {

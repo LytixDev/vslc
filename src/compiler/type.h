@@ -102,7 +102,7 @@ typedef enum {
     SYMBOL_GLOBAL_VAR,
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
-    // SYMBOL_MEMBER,
+    SYMBOL_MEMBER,
 
     SYMBOL_TYPE_LEN,
 } SymbolKind;
