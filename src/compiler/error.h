@@ -50,6 +50,7 @@ void error_lex(ErrorHandler *e, char *msg, Point start, Point end);
 void error_parse(ErrorHandler *e, char *msg, Token guilty);
 void error_node(ErrorHandler *e, char *msg, AstNode *guilty);
 void error_sym(ErrorHandler *e, char *msg, Str8 sym_name);
+void error_typecheck_binary(ErrorHandler *e, char *msg, AstNode *guilty, TypeInfo *l, TypeInfo *r);
 // void error_type_unresolved(ErrorHandler *e, Str8List list, char *msg, Str8 type_name);
 
 #endif /* ERROR_H */

@@ -66,6 +66,8 @@ typedef Str8 Str8View;
     ((a).len == (b).len && ((a).len == 0 || memcmp((a).str, (b).str, (a).len) == 0))
 
 
+u32 str_view_to_u32(Str8View view, bool *success);
+
 Str8Builder make_str_builder(Arena *arena);
 // void str_builder_append_str8(StrBuilder *sb, Str8 str);
 void str_builder_append_u8(Str8Builder *sb, u8 c);

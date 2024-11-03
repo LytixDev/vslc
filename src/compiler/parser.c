@@ -69,7 +69,7 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
 static AstNode *parse_expr_list(Parser *parser);
 static AstStmt *parse_stmt(Parser *parser);
-static TypedVarList parse_local_decl_list(Parser *parser);
+static AstTypedVarList parse_local_decl_list(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
 static Token next_token(Parser *parser)
@@ -160,7 +160,11 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
     Token peek = peek_token(parser);
     if (peek.type == TOKEN_NUM) {
         next_token(parser);
-        elements = 10; // peek.num_value; TODO: Str8View to s32
+        bool parsed_success;
+        elements = str_view_to_u32(peek.lexeme, &parsed_success);
+        if (!parsed_success) {
+            error_parse(parser->lexer.e, "Could not be parsed as a u32", peek);
+        }
     }
     consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate the array type");
     return (AstTypeInfo){
@@ -345,7 +349,7 @@ static AstStmtIf *parse_if(Parser *parser)
 static AstStmtBlock *parse_block(Parser *parser)
 {
     /* Came from TOKEN_BLOCK */
-    TypedVarList declarations = { 0 };
+    AstTypedVarList declarations = { 0 };
     if (match_token(parser, TOKEN_VAR)) {
         declarations = parse_local_decl_list(parser);
     }
@@ -427,11 +431,12 @@ static AstStmt *parse_stmt(Parser *parser)
     }
 }
 
-static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types, bool typed)
+static AstTypedVarList parse_variable_list(Parser *parser, bool allow_array_types, bool typed)
 {
-    TypedVarList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, TypedVar), .len = 0 };
+    AstTypedVarList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, AstTypedVar),
+                                   .len = 0 };
 
-    TypedVar *indices_head = typed_vars.vars;
+    AstTypedVar *indices_head = typed_vars.vars;
     do {
         /*
          * If not first iteration of loop then we need to consume the comma we already peeked and
@@ -439,14 +444,14 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types, 
          */
         if (typed_vars.len != 0) {
             next_token(parser);
-            indices_head = m_arena_alloc_struct(parser->arena, TypedVar);
+            indices_head = m_arena_alloc_struct(parser->arena, AstTypedVar);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected variable name");
         AstTypeInfo type_info = { 0 };
         if (typed) {
             type_info = parse_type(parser, allow_array_types);
         }
-        TypedVar new = { .name = identifier.lexeme, .ast_type_info = type_info };
+        AstTypedVar new = { .name = identifier.lexeme, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
         typed_vars.len++;
@@ -455,12 +460,12 @@ static TypedVarList parse_variable_list(Parser *parser, bool allow_array_types, 
     return typed_vars;
 }
 
-static TypedVarList parse_local_decl_list(Parser *parser)
+static AstTypedVarList parse_local_decl_list(Parser *parser)
 {
     /* Came from TOKEN_VAR */
-    TypedVarList identifiers = parse_variable_list(parser, false, true);
+    AstTypedVarList identifiers = parse_variable_list(parser, false, true);
     while (match_token(parser, TOKEN_VAR)) {
-        TypedVarList next_identifiers = parse_variable_list(parser, false, true);
+        AstTypedVarList next_identifiers = parse_variable_list(parser, false, true);
         /*
          * Since parse_variable_list ensures the identifiers are stored contigiously, and we do no
          * other allocations on the parser arena, consequetive retain this contigious property.
@@ -477,7 +482,7 @@ static AstFunc *parse_func(Parser *parser)
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected function name");
 
     consume_or_err(parser, TOKEN_LPAREN, "Expected '(' to start function parameter list");
-    TypedVarList vars = { 0 };
+    AstTypedVarList vars = { 0 };
     if (peek_token(parser).type != TOKEN_RPAREN) {
         vars = parse_variable_list(parser, true, true);
     }
@@ -511,7 +516,7 @@ static AstRoot *parse_root(Parser *parser)
         }; break;
         case TOKEN_VAR: {
             /* Parse global declarations list */
-            TypedVarList vars = parse_variable_list(parser, true, true);
+            AstTypedVarList vars = parse_variable_list(parser, true, true);
             AstNodeVarList *node_vars = make_node_var_list(parser->arena, vars);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
             if (declarations.head == NULL) {
@@ -524,7 +529,7 @@ static AstRoot *parse_root(Parser *parser)
         case TOKEN_STRUCT: {
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected struct name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after struct name");
-            TypedVarList members = parse_variable_list(parser, true, true);
+            AstTypedVarList members = parse_variable_list(parser, true, true);
             AstStruct *struct_decl = make_struct(parser->arena, name.lexeme, members);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
             if (structs.head == NULL) {
@@ -537,7 +542,7 @@ static AstRoot *parse_root(Parser *parser)
         case TOKEN_ENUM: {
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected enum name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after enum name");
-            TypedVarList values = parse_variable_list(parser, true, false);
+            AstTypedVarList values = parse_variable_list(parser, true, false);
             AstEnum *enum_decl = make_enum(parser->arena, name.lexeme, values);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)enum_decl);
             if (enums.head == NULL) {

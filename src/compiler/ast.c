@@ -17,16 +17,17 @@
 #include "ast.h"
 #include "base/str.h"
 #include "lex.h"
+#include "type.h"
 #include <stdio.h>
 
 char *node_type_str_map[AST_NODE_TYPE_LEN] = {
-    "EXPR_UNARY",        "EXPR_BINARY",       "EXPR_LITERAL",
-    "EXPR_CALL",         "STMT_WHILE",        "STMT_IF",
-    "STMT_ABRUPT",       "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
-    "STMT_BREAK_RETURN", "STMT_PRINT",        "STMT_EXPR",
-    "STMT_BLOCK",        "STMT_ASSIGNMENT",   "AST_FUNC",
-    "AST_STRUCT",        "AST_ENUM",          "AST_LIST",
-    "AST_NODE_VAR_LIST", "AST_ROOT",
+    "EXPR_UNARY",         "EXPR_BINARY",       "EXPR_LITERAL",
+    "EXPR_CALL",          "STMT_WHILE",        "STMT_IF",
+    "STMT_ABRUPT",        "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
+    "STMT_ABRUPT_RETURN", "STMT_PRINT",        "STMT_EXPR",
+    "STMT_BLOCK",         "STMT_ASSIGNMENT",   "AST_FUNC",
+    "AST_STRUCT",         "AST_ENUM",          "AST_LIST",
+    "AST_NODE_VAR_LIST",  "AST_ROOT",
 };
 
 /* Expressions */
@@ -101,7 +102,7 @@ AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print
     return stmt;
 }
 
-AstStmtBlock *make_block(Arena *arena, TypedVarList declarations, AstList *stmts)
+AstStmtBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *stmts)
 {
     AstStmtBlock *stmt = m_arena_alloc(arena, sizeof(AstStmtBlock));
     stmt->type = STMT_BLOCK;
@@ -120,7 +121,7 @@ AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 }
 
 /* Other nodes */
-AstFunc *make_function(Arena *arena, Str8View name, TypedVarList parameters, AstStmt *body,
+AstFunc *make_function(Arena *arena, Str8View name, AstTypedVarList parameters, AstStmt *body,
                        AstTypeInfo return_type)
 {
     AstFunc *func = m_arena_alloc(arena, sizeof(AstFunc));
@@ -132,7 +133,7 @@ AstFunc *make_function(Arena *arena, Str8View name, TypedVarList parameters, Ast
     return func;
 }
 
-AstStruct *make_struct(Arena *arena, Str8View name, TypedVarList members)
+AstStruct *make_struct(Arena *arena, Str8View name, AstTypedVarList members)
 {
     AstStruct *struct_decl = m_arena_alloc(arena, sizeof(AstStruct));
     struct_decl->type = AST_STRUCT;
@@ -141,7 +142,7 @@ AstStruct *make_struct(Arena *arena, Str8View name, TypedVarList members)
     return struct_decl;
 }
 
-AstEnum *make_enum(Arena *arena, Str8View name, TypedVarList values)
+AstEnum *make_enum(Arena *arena, Str8View name, AstTypedVarList values)
 {
     AstEnum *enum_decl = m_arena_alloc(arena, sizeof(AstEnum));
     enum_decl->type = AST_ENUM;
@@ -173,7 +174,7 @@ void ast_list_push_back(AstList *list, AstListNode *node)
     list->tail = node;
 }
 
-AstNodeVarList *make_node_var_list(Arena *arena, TypedVarList vars)
+AstNodeVarList *make_node_var_list(Arena *arena, AstTypedVarList vars)
 {
     AstNodeVarList *node_var_list = m_arena_alloc(arena, sizeof(AstNodeVarList));
     node_var_list->type = AST_NODE_VAR_LIST;
@@ -201,10 +202,10 @@ static void print_indent(u32 indent)
     }
 }
 
-static void ast_print_typed_var_list(TypedVarList vars)
+static void ast_print_typed_var_list(AstTypedVarList vars)
 {
     for (u32 i = 0; i < vars.len; i++) {
-        TypedVar var = vars.vars[i];
+        AstTypedVar var = vars.vars[i];
         if (var.ast_type_info.is_array) {
             printf("%.*s: %.*s[%d]", STR8VIEW_PRINT(var.name),
                    STR8VIEW_PRINT(var.ast_type_info.name), var.ast_type_info.elements);
@@ -242,6 +243,9 @@ static void ast_print_expr(AstExpr *head, u32 indent)
     case EXPR_LITERAL: {
         AstExprLiteral *lit = AS_LITERAL(head);
         printf("%.*s", STR8VIEW_PRINT(lit->literal));
+        if (lit->sym != NULL) {
+            printf(" (bound to %d)", lit->sym->seq_no);
+        }
     } break;
     case EXPR_CALL: {
         AstExprCall *call = AS_CALL(head);
@@ -343,7 +347,7 @@ void ast_print(AstNode *head, u32 indent)
         printf("name=%.*s", STR8VIEW_PRINT(enum_decl->name));
         printf(" values=");
         for (u32 i = 0; i < enum_decl->members.len; i++) {
-            TypedVar var = enum_decl->members.vars[i];
+            AstTypedVar var = enum_decl->members.vars[i];
             printf("%.*s", STR8VIEW_PRINT(var.name));
             if (i != enum_decl->members.len - 1) {
                 printf(", ");

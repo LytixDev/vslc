@@ -1,13 +1,13 @@
 #!/bin/sh
 
 SRCS=$(find "src" -type f -name "*.c" -not -name "parser_main.c")
-OUT="vslc"
+OUT="metagenc"
 
 if [ "$1" = "parser" ] 
 then
     # Build standalone parser
     SRCS=$(find "src" -type f -name "*.c" -not -name "main.c")
-    OUT="vslc-parser"
+    OUT="metagenc-parser"
 fi
 
 CFLAGS="-Isrc -Wall -Wpedantic -Wextra -Wshadow -std=c11 -g"

@@ -11,7 +11,7 @@ loop file in $files {
     var given  = (echo $content | sed -n '/^--- GIVEN ---$/,/^--- EXPECT ---$/p' | sed '1d;$d')
     var expect = (echo $content | sed -n '/^--- EXPECT ---$/,$p' | sed '1d')
     
-    var actual = (echo $given | ./vslc-parser)
+    var actual = (echo $given | ./metagenc-parser)
     
     # Make temporary files
     var expect_file = (mktemp)
