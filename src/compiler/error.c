@@ -105,3 +105,8 @@ void error_sym(ErrorHandler *e, char *msg, Str8 name)
     Str8 str = str_builder_end(&sb);
     append_err(e, str);
 }
+
+void error_typecheck_binary(ErrorHandler *e, char *msg, AstNode *guilty, TypeInfo *l, TypeInfo *r)
+{
+    error_node(e, msg, guilty);
+}

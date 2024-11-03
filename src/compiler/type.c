@@ -64,6 +64,22 @@ static void *make_type_info(Arena *arena, TypeInfoKind kind, Str8 generated_by_n
     return info;
 }
 
+static bool type_info_equal(TypeInfo *a, TypeInfo *b)
+{
+    /* Name equivalence. Arrays also need same number of elements */
+    // NOTE: when we introduce double pointers this won't work
+    if (a->kind != b->kind) {
+        return false;
+    }
+    if (a->kind == TYPE_ARRAY) {
+        TypeInfoArray *aa = (TypeInfoArray *)a;
+        TypeInfoArray *bb = (TypeInfoArray *)b;
+        return aa->elements == bb->elements && type_info_equal(aa->element_type, bb->element_type);
+    } else {
+        return STR8VIEW_EQUAL(a->generated_by_name, b->generated_by_name);
+    }
+}
+
 static SymbolTable make_symt(SymbolTable *parent)
 {
     SymbolTable symt = { .sym_len = 0,
@@ -105,7 +121,7 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
     sym->type_info = type_info;
     sym->node = node;
     if (kind == SYMBOL_FUNC) {
-        sym->function_symtable = make_symt(symt);
+        sym->symt_local = make_symt(symt);
     }
 
     /* Ensure space in the symbol table and add the new symbol */
@@ -184,10 +200,13 @@ static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati, bool err_
     return type_info;
 }
 
-static TypeInfoEnum *enum_decl_to_type(Compiler *compiler, AstEnum *decl)
+static void enum_decl_to_type(Compiler *compiler, AstEnum *decl)
 {
     Arena *arena = compiler->persist_arena;
     TypeInfoEnum *t = make_type_info(arena, TYPE_ENUM, decl->name);
+    symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, decl->name, (TypeInfo *)t,
+                 (AstNode *)decl);
+
     t->member_names = m_arena_alloc(arena, sizeof(Str8) * decl->members.len);
     t->members_len = decl->members.len;
 
@@ -195,8 +214,6 @@ static TypeInfoEnum *enum_decl_to_type(Compiler *compiler, AstEnum *decl)
         AstTypedVar tv = decl->members.vars[i];
         t->member_names[i] = tv.name;
     }
-
-    return t;
 }
 
 static TypeInfoStruct *struct_decl_to_type(Compiler *compiler, AstStruct *decl)
@@ -258,22 +275,27 @@ static TypeInfoFunc *func_decl_to_type(Compiler *compiler, AstFunc *decl)
     return t;
 }
 
-static void bind_expr(Compiler *compiler, SymbolTable *symt, AstExpr *head)
+static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 {
     switch (head->type) {
     case EXPR_UNARY:
-        bind_expr(compiler, symt, AS_UNARY(head)->expr);
+        bind_expr(compiler, symt_local, AS_UNARY(head)->expr);
         break;
-    case EXPR_BINARY:
-        bind_expr(compiler, symt, AS_BINARY(head)->left);
-        bind_expr(compiler, symt, AS_BINARY(head)->right);
-        break;
+    case EXPR_BINARY: {
+        AstExprBinary *expr = AS_BINARY(head);
+        bind_expr(compiler, symt_local, AS_BINARY(head)->left);
+        // TODO: RHS of struct member access will not be bound? Need to iron this one out.
+        //       same for enum mmeber access
+        if (expr->op != TOKEN_DOT) {
+            bind_expr(compiler, symt_local, AS_BINARY(head)->right);
+        }
+    } break;
     case EXPR_LITERAL: {
         AstExprLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type != LIT_IDENT) {
             return;
         }
-        Symbol *sym = symt_find_sym(symt, lit->literal);
+        Symbol *sym = symt_find_sym(symt_local, lit->literal);
         if (sym == NULL) {
             error_sym(compiler->e, "Variable never declared", lit->literal);
         }
@@ -281,12 +303,15 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt, AstExpr *head)
     } break;
     case EXPR_CALL: {
         AstExprCall *call = AS_CALL(head);
+        if (call->args == NULL) {
+            break;
+        }
         if ((u32)call->args->type == (u32)EXPR_LITERAL) {
-            bind_expr(compiler, symt, (AstExpr *)call->args);
+            bind_expr(compiler, symt_local, (AstExpr *)call->args);
         } else {
             AstList *args = (AstList *)call->args;
             for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                bind_expr(compiler, symt, (AstExpr *)node->this);
+                bind_expr(compiler, symt_local, (AstExpr *)node->this);
             }
         }
     } break;
@@ -295,17 +320,17 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt, AstExpr *head)
     }
 }
 
-static void bind_stmt(Compiler *compiler, SymbolTable *symt, AstStmt *head)
+static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head)
 {
     switch (head->type) {
     case STMT_WHILE:
-        bind_expr(compiler, symt, AS_WHILE(head)->condition);
-        bind_stmt(compiler, symt, AS_WHILE(head)->body);
+        bind_expr(compiler, symt_local, AS_WHILE(head)->condition);
+        bind_stmt(compiler, symt_local, AS_WHILE(head)->body);
         break;
     case STMT_IF:
-        bind_expr(compiler, symt, AS_IF(head)->condition);
-        bind_stmt(compiler, symt, AS_IF(head)->then);
-        bind_stmt(compiler, symt, AS_IF(head)->else_);
+        bind_expr(compiler, symt_local, AS_IF(head)->condition);
+        bind_stmt(compiler, symt_local, AS_IF(head)->then);
+        bind_stmt(compiler, symt_local, AS_IF(head)->else_);
         break;
     case STMT_ABRUPT_BREAK:
     case STMT_ABRUPT_CONTINUE:
@@ -313,17 +338,17 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt, AstStmt *head)
     case STMT_EXPR: {
         AstStmtSingle *stmt = AS_SINGLE(head);
         if (stmt->node) {
-            bind_expr(compiler, symt, (AstExpr *)stmt->node);
+            bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
         }
     }; break;
     case STMT_PRINT: {
         AstStmtSingle *stmt = AS_SINGLE(head);
         if ((u32)stmt->node->type == (u32)EXPR_LITERAL) {
-            bind_expr(compiler, symt, (AstExpr *)stmt->node);
+            bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
         } else {
             AstList *args = (AstList *)stmt->node;
             for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                bind_expr(compiler, symt, (AstExpr *)node->this);
+                bind_expr(compiler, symt_local, (AstExpr *)node->this);
             }
         }
     }; break;
@@ -334,15 +359,16 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt, AstStmt *head)
         for (u32 i = 0; i < stmt->declarations.len; i++) {
             AstTypedVar param = stmt->declarations.vars[i];
             TypeInfo *param_type = ast_type_resolve(compiler, param.ast_type_info, true);
-            symt_new_sym(compiler, symt, SYMBOL_LOCAL_VAR, param.name, param_type, (AstNode *)stmt);
+            symt_new_sym(compiler, symt_local, SYMBOL_LOCAL_VAR, param.name, param_type,
+                         (AstNode *)stmt);
         }
         for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {
-            bind_stmt(compiler, symt, (AstStmt *)node->this);
+            bind_stmt(compiler, symt_local, (AstStmt *)node->this);
         }
     }; break;
     case STMT_ASSIGNMENT:
-        bind_expr(compiler, symt, AS_ASSIGNMENT(head)->left);
-        bind_expr(compiler, symt, AS_ASSIGNMENT(head)->right);
+        bind_expr(compiler, symt_local, AS_ASSIGNMENT(head)->left);
+        bind_expr(compiler, symt_local, AS_ASSIGNMENT(head)->right);
         break;
     default:
         ASSERT_NOT_REACHED;
@@ -358,11 +384,115 @@ static void bind_function(Compiler *compiler, AstFunc *func)
     for (u32 i = 0; i < func->parameters.len; i++) {
         AstTypedVar param = func->parameters.vars[i];
         TypeInfo *param_type = ast_type_resolve(compiler, param.ast_type_info, true);
-        symt_new_sym(compiler, &func_sym->function_symtable, SYMBOL_PARAM, param.name, param_type,
+        symt_new_sym(compiler, &func_sym->symt_local, SYMBOL_PARAM, param.name, param_type,
                      (AstNode *)func);
     }
 
-    bind_stmt(compiler, &func_sym->function_symtable, func->body);
+    bind_stmt(compiler, &func_sym->symt_local, func->body);
+}
+
+
+static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
+{
+    switch (head->type) {
+    case EXPR_UNARY: {
+        AstExprUnary *expr = AS_UNARY(head);
+        TypeInfo *t = typecheck_expr(compiler, symt_local, expr->expr);
+        if (expr->op == TOKEN_AMPERSAND) {
+            // TODO: Should we really create a new type everytime we need a pointer type ?
+            TypeInfoPointer *tp =
+                make_type_info(compiler->persist_arena, TYPE_POINTER, t->generated_by_name);
+            tp->info.is_resolved = true;
+            tp->pointer_to = t;
+            return (TypeInfo *)tp;
+        } else {
+            return t;
+        }
+    }; break;
+    case EXPR_BINARY: {
+        AstExprBinary *expr = AS_BINARY(head);
+        // TODO: some binary ops have a limited number of types that are allowed
+        //       f.ex. we don't allow addition of structs
+        TypeInfo *left = typecheck_expr(compiler, symt_local, expr->left);
+        // TODO: same as in bind_expr. Need to iron this one out.
+        if (expr->op == TOKEN_DOT) {
+            return left;
+        }
+        TypeInfo *right = typecheck_expr(compiler, symt_local, expr->right);
+        if (!type_info_equal(left, right)) {
+            error_typecheck_binary(compiler->e, "bin", (AstNode *)head, left, right);
+        }
+        return left;
+    } break;
+    case EXPR_LITERAL: {
+        AstExprLiteral *lit = AS_LITERAL(head);
+        if (lit->lit_type == LIT_IDENT) {
+            return lit->sym->type_info;
+        }
+        // TODO: temporary assumption that every constant literal that is not an ident is a s32
+        Symbol *sym = symt_find_sym(symt_local, (Str8){ .len = 3, .str = (u8 *)"s32" });
+        return sym->type_info;
+    } break;
+    case EXPR_CALL: {
+        AstExprCall *call = AS_CALL(head);
+        Symbol *sym = symt_find_sym(symt_local, call->identifier);
+        TypeInfoFunc *callee = (TypeInfoFunc *)sym->type_info;
+        return callee->return_type;
+        // TODO: Typecheck params vs args of function
+    } break;
+    default:
+        ASSERT_NOT_REACHED;
+    }
+    ASSERT_NOT_REACHED;
+}
+
+static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfoFunc *parent_func,
+                           AstStmt *head)
+{
+    switch (head->type) {
+    case STMT_WHILE:
+        typecheck_expr(compiler, symt_local, AS_WHILE(head)->condition);
+        typecheck_stmt(compiler, symt_local, parent_func, AS_WHILE(head)->body);
+        break;
+    case STMT_IF:
+        typecheck_expr(compiler, symt_local, AS_IF(head)->condition);
+        typecheck_stmt(compiler, symt_local, parent_func, AS_IF(head)->then);
+        typecheck_stmt(compiler, symt_local, parent_func, AS_IF(head)->else_);
+        break;
+    case STMT_ABRUPT_RETURN: {
+        TypeInfo *ret = typecheck_expr(compiler, symt_local, AS_IF(head)->condition);
+        if (!type_info_equal(ret, parent_func->return_type)) {
+            error_typecheck_binary(compiler->e, "wrong return type", (AstNode *)head, ret,
+                                   parent_func->return_type);
+        }
+    }; break;
+    case STMT_EXPR: {
+        typecheck_expr(compiler, symt_local, (AstExpr *)AS_SINGLE(head)->node);
+    }; break;
+    case STMT_PRINT: {
+        // AstStmtSingle *stmt = AS_SINGLE(head);
+    }; break;
+    case STMT_BLOCK: {
+        AstStmtBlock *stmt = AS_BLOCK(head);
+        // TODO: blocks should create new scopes, so we need to use that here
+        for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {
+            typecheck_stmt(compiler, symt_local, parent_func, (AstStmt *)node->this);
+        }
+    }; break;
+    case STMT_ASSIGNMENT: {
+        TypeInfo *l = typecheck_expr(compiler, symt_local, AS_ASSIGNMENT(head)->left);
+        TypeInfo *r = typecheck_expr(compiler, symt_local, AS_ASSIGNMENT(head)->right);
+        if (!type_info_equal(l, r)) {
+            error_typecheck_binary(compiler->e, "Typecheck error in assignment", (AstNode *)head, l,
+                                   r);
+        }
+    } break;
+    case STMT_ABRUPT_BREAK:
+    case STMT_ABRUPT_CONTINUE:
+        break;
+    default:
+        ASSERT_NOT_REACHED;
+    }
 }
 
 /* --- PRINT --- */
@@ -385,7 +515,7 @@ static void symt_print(SymbolTable symt)
         }
         if (sym->kind == SYMBOL_FUNC) {
             printf("func syms:\n");
-            symt_print(sym->function_symtable);
+            symt_print(sym->symt_local);
             putchar('\n');
         }
     }
@@ -460,7 +590,6 @@ static void type_info_print(TypeInfo *type_info)
         break;
     }
 }
-
 
 /* --- Graph --- */
 typedef struct graph_node_t GraphNode;
@@ -640,9 +769,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     /* Create symbols and types for global declarations */
     for (AstListNode *node = root->enums.head; node != NULL; node = node->next) {
         AstEnum *enum_decl = AS_ENUM(node->this);
-        TypeInfoEnum *t = enum_decl_to_type(compiler, enum_decl);
-        symt_new_sym(compiler, &compiler->symt_root, SYMBOL_TYPE, enum_decl->name, (TypeInfo *)t,
-                     node->this);
+        enum_decl_to_type(compiler, enum_decl);
     }
     for (AstListNode *node = root->structs.head; node != NULL; node = node->next) {
         AstStruct *struct_decl = AS_STRUCT(node->this);
@@ -719,12 +846,23 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         return;
     }
 
-    /* Symbol gen and typecheck */
+    /* Symbol gen */
     for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
         bind_function(compiler, AS_FUNC(node->this));
     }
+    if (compiler->e->n_errors != 0) {
+        return;
+    }
 
-    symt_print(compiler->symt_root);
+    /* Typecheck each function */
+    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
+        AstFunc *func = AS_FUNC(node->this);
+        Symbol *func_sym = symt_find_sym(&compiler->symt_root, func->name);
+        assert(func_sym != NULL && "Could not find symbol for function in bind_and_check!?!?");
+        typecheck_stmt(compiler, &func_sym->symt_local, (TypeInfoFunc *)func_sym->type_info,
+                       func->body);
+    }
+    // symt_print(compiler->symt_root);
 
     /*
     // Print symbols

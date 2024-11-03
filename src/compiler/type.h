@@ -97,11 +97,12 @@ typedef struct {
 
 typedef enum {
     // SYMBOL_GLOBAL_ARRAY,
-    SYMBOL_TYPE,
+    SYMBOL_TYPE, // Structs and enums
     SYMBOL_FUNC,
     SYMBOL_GLOBAL_VAR,
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
+    // SYMBOL_MEMBER,
 
     SYMBOL_TYPE_LEN,
 } SymbolKind;
@@ -130,8 +131,8 @@ struct symbol_t {
     u32 seq_no; // Sequence number in the symbol table this symbol belongs to
     Str8 name;
     TypeInfo *type_info; // @NULLABLE
-    AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler.
-    SymbolTable function_symtable; // Only used when node is AST_FUNC
+    AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler
+    SymbolTable symt_local; // FUNC and TYPE (structs and enums) create local symbol tables
 };
 
 
