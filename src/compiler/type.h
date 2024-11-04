@@ -33,7 +33,7 @@ typedef enum {
     TYPE_INFO_KIND_LEN
 } TypeInfoKind;
 
-typedef struct {
+typedef struct type_info_t {
     TypeInfoKind kind;
     bool is_resolved;
     Str8 generated_by_name; // Not used by TYPE_ARRAY
@@ -136,6 +136,7 @@ struct symbol_t {
 };
 
 
+Symbol *symt_find_sym(SymbolTable *symt, Str8 key);
 void symbol_generate(Compiler *compiler, AstRoot *root);
 
 #endif /* TYPE_H */

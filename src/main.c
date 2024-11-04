@@ -19,6 +19,7 @@
 #include "compiler/ast.h"
 #include "compiler/compiler.h"
 #include "compiler/error.h"
+#include "compiler/gen.h"
 #include "compiler/parser.h"
 #include "compiler/type.h"
 
@@ -53,8 +54,10 @@ u32 run(char *input)
         printf("%s\n", err->msg.str);
     }
 
-    ast_print((AstNode *)ast_root, 0);
-    putchar('\n');
+    // ast_print((AstNode *)ast_root, 0);
+    // putchar('\n');
+
+    transpile_to_c(&compiler);
 
 done:
     error_handler_release(&e);

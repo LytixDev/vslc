@@ -21,6 +21,7 @@
 #include "lex.h"
 
 typedef struct symbol_t Symbol; // forward from type.h
+typedef struct type_info_t TypeInfo; // forward from type.h
 
 
 typedef struct {
@@ -98,6 +99,7 @@ typedef enum {
  */
 typedef struct expr_t {
     AstExprType type;
+    TypeInfo *t; // @NULLABLE. Only set after typechecking.
 } AstExpr;
 
 typedef struct stmt_t {

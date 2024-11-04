@@ -65,6 +65,12 @@ typedef Str8 Str8View;
 #define STR8VIEW_EQUAL(a, b) \
     ((a).len == (b).len && ((a).len == 0 || memcmp((a).str, (b).str, (a).len) == 0))
 
+#define STR8_LIT(literal)                    \
+    (Str8)                                   \
+    {                                        \
+        sizeof(literal) - 1, (u8 *)(literal) \
+    }
+
 
 u32 str_view_to_u32(Str8View view, bool *success);
 

@@ -171,7 +171,7 @@ static Symbol *symt_new_sym(Compiler *compiler, SymbolTable *symt, SymbolKind ki
     return sym;
 }
 
-static Symbol *symt_find_sym(SymbolTable *symt, Str8 key)
+Symbol *symt_find_sym(SymbolTable *symt, Str8 key)
 {
     Symbol *sym = NULL;
     SymbolTable *t = symt;
@@ -358,8 +358,9 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
     }; break;
     case STMT_PRINT: {
         AstStmtSingle *stmt = AS_SINGLE(head);
-        if ((u32)stmt->node->type == (u32)EXPR_LITERAL) {
+        if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
             bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
+            return;
         } else {
             AstList *args = (AstList *)stmt->node;
             for (AstListNode *node = args->head; node != NULL; node = node->next) {
@@ -372,9 +373,9 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
         // TODO: blocks create new scopes
         /* Create symbols for declarations */
         for (u32 i = 0; i < stmt->declarations.len; i++) {
-            AstTypedVar param = stmt->declarations.vars[i];
-            TypeInfo *param_type = ast_type_resolve(compiler, param.ast_type_info, true);
-            symt_new_sym(compiler, symt_local, SYMBOL_LOCAL_VAR, param.name, param_type,
+            AstTypedVar decl = stmt->declarations.vars[i];
+            TypeInfo *decl_type = ast_type_resolve(compiler, decl.ast_type_info, true);
+            symt_new_sym(compiler, symt_local, SYMBOL_LOCAL_VAR, decl.name, decl_type,
                          (AstNode *)stmt);
         }
         for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {
@@ -419,6 +420,7 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
                 make_type_info(compiler->persist_arena, TYPE_POINTER, t->generated_by_name);
             tp->info.is_resolved = true;
             tp->pointer_to = t;
+            head->t = (TypeInfo *)tp;
             return (TypeInfo *)tp;
         } else if (expr->op == TOKEN_STAR) {
             if (t->kind != TYPE_POINTER) {
@@ -931,7 +933,8 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         typecheck_stmt(compiler, &func_sym->symt_local, (TypeInfoFunc *)func_sym->type_info,
                        func->body);
     }
-    symt_print(compiler->symt_root);
+
+    // symt_print(compiler->symt_root);
 
     /*
     // Print symbols
