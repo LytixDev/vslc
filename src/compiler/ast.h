@@ -114,12 +114,14 @@ typedef struct {
 /* Expressions */
 typedef struct {
     AstExprType type;
+    TypeInfo *t; // @NULLABLE. Only set after typechecking.
     TokenType op;
     AstExpr *expr;
 } AstExprUnary;
 
 typedef struct {
     AstExprType type;
+    TypeInfo *t; // @NULLABLE. Only set after typechecking.
     AstExpr *left;
     TokenType op;
     AstExpr *right;
@@ -127,6 +129,7 @@ typedef struct {
 
 typedef struct {
     AstExprType type;
+    TypeInfo *t; // @NULLABLE. Only set after typechecking.
     LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
     Str8View literal; // Guranteed to be zero-terminated for STR and IDENT aka Str8
     // TODO: Unsure if this is how we want it going forward.
@@ -135,6 +138,7 @@ typedef struct {
 
 typedef struct {
     AstExprType type;
+    TypeInfo *t; // @NULLABLE. Only set after typechecking.
     Str8 identifier;
     AstNode *args; // @NULLABLE. List
 } AstExprCall;

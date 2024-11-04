@@ -421,15 +421,17 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
             tp->info.is_resolved = true;
             tp->pointer_to = t;
             head->t = (TypeInfo *)tp;
-            return (TypeInfo *)tp;
+            return head->t;
         } else if (expr->op == TOKEN_STAR) {
             if (t->kind != TYPE_POINTER) {
                 error_node(compiler->e, "Can not dereference x", (AstNode *)head);
             } else {
-                return ((TypeInfoPointer *)t)->pointer_to;
+                head->t = ((TypeInfoPointer *)t)->pointer_to;
+                return head->t;
             }
         } else {
-            return t;
+            head->t = t;
+            return head->t;
         }
     }; break;
     case EXPR_BINARY: {
@@ -439,7 +441,8 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         if (expr->op == TOKEN_DOT) {
             if (!(left->kind == TYPE_STRUCT || left->kind == TYPE_ENUM)) {
                 error_typecheck_binary(compiler->e, "Has no members", (AstNode *)head, left, left);
-                return left;
+                head->t = left;
+                return head->t;
             }
             /*
              * For member accesses, the RHS could not be bound before we knew the type of the LHS,
@@ -450,7 +453,8 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
              */
             Symbol *type_sym = symt_find_sym(symt_local, left->generated_by_name);
             bind_expr(compiler, &type_sym->symt_local, expr->right);
-            return typecheck_expr(compiler, &type_sym->symt_local, expr->right);
+            head->t = typecheck_expr(compiler, &type_sym->symt_local, expr->right);
+            return head->t;
         }
 
         TypeInfo *right = typecheck_expr(compiler, symt_local, expr->right);
@@ -460,16 +464,19 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
 
         // TODO: some binary ops have a limited number of types that are allowed
         //       f.ex. we don't allow addition of structs
-        return left;
+        head->t = left;
+        return head->t;
     } break;
     case EXPR_LITERAL: {
         AstExprLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type == LIT_IDENT) {
-            return lit->sym->type_info;
+            head->t = lit->sym->type_info;
+            return head->t;
         }
         // TODO: temporary assumption that every constant literal that is not an ident is a s32
         Symbol *sym = symt_find_sym(symt_local, (Str8){ .len = 3, .str = (u8 *)"s32" });
-        return sym->type_info;
+        head->t = sym->type_info;
+        return head->t;
     } break;
     case EXPR_CALL: {
         AstExprCall *call = AS_CALL(head);
@@ -478,8 +485,13 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         /* Check that enough args were supplied */
         if (call->args == NULL && callee->n_params != 0) {
             error_node(compiler->e, "Expected n args, but got 0", (AstNode *)call);
-            return callee->return_type;
+            head->t = callee->return_type;
+            return head->t;
         }
+        /* If args is a single expression */
+        // TODO: parser should wrap single expression in a list
+
+        /* If args is a list */
         AstList *args = (AstList *)call->args;
         u32 n_args = 0;
         for (AstListNode *node = args->head; node != NULL; node = node->next) {
@@ -487,7 +499,8 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         }
         if (n_args != callee->n_params) {
             error_node(compiler->e, "Expected x args, but got y", (AstNode *)head);
-            return callee->return_type;
+            head->t = callee->return_type;
+            return head->t;
         }
         /* Typecheck params vs args */
         u32 i = 0;
@@ -500,7 +513,8 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
             }
             i += 1;
         }
-        return callee->return_type;
+        head->t = callee->return_type;
+        return head->t;
     } break;
     default:
         ASSERT_NOT_REACHED;
@@ -532,7 +546,15 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
         typecheck_expr(compiler, symt_local, (AstExpr *)AS_SINGLE(head)->node);
     }; break;
     case STMT_PRINT: {
-        // AstStmtSingle *stmt = AS_SINGLE(head);
+        AstStmtSingle *stmt = AS_SINGLE(head);
+        if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
+            typecheck_expr(compiler, symt_local, (AstExpr *)stmt->node);
+        } else {
+            AstList *args = (AstList *)stmt->node;
+            for (AstListNode *node = args->head; node != NULL; node = node->next) {
+                typecheck_expr(compiler, symt_local, (AstExpr *)node->this);
+            }
+        }
     }; break;
     case STMT_BLOCK: {
         AstStmtBlock *stmt = AS_BLOCK(head);
