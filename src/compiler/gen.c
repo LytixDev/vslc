@@ -143,7 +143,7 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
     //     bind_expr(compiler, symt_local, AS_UNARY(head)->expr);
     //     break;
     case EXPR_BINARY: {
-        AstExprBinary *expr = AS_BINARY(head);
+        AstBinary *expr = AS_BINARY(head);
 
         if (expr->op == TOKEN_DOT && expr->t->kind == TYPE_ENUM) {
             TypeInfoEnum *t = (TypeInfoEnum *)expr->t;
@@ -200,7 +200,7 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         // }
     } break;
     case EXPR_LITERAL: {
-        AstExprLiteral *lit = AS_LITERAL(head);
+        AstLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type == LIT_NUM) {
             bool success;
             u32 num = str_view_to_u32(lit->literal, &success);
@@ -215,7 +215,7 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         }
     } break;
     case EXPR_CALL: {
-        AstExprCall *call = AS_CALL(head);
+        AstCall *call = AS_CALL(head);
         fprintf(f, "%s(", call->identifier.str);
         if (call->args != NULL) {
             if ((u32)call->args->type == (u32)EXPR_LITERAL) {
@@ -248,7 +248,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     //     bind_stmt(compiler, symt_local, AS_WHILE(head)->body);
     //     break;
     case STMT_IF: {
-        AstStmtIf *stmt = AS_IF(head);
+        AstIf *stmt = AS_IF(head);
         fprintf(f, "if (");
         gen_expr(compiler, symt_local, stmt->condition);
         fprintf(f, ") {");
@@ -264,7 +264,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     // case STMT_ABRUPT_BREAK:
     // case STMT_ABRUPT_CONTINUE:
     case STMT_ABRUPT_RETURN: {
-        AstStmtSingle *stmt = AS_SINGLE(head);
+        AstSingle *stmt = AS_SINGLE(head);
         fprintf(f, "return ");
         gen_expr(compiler, symt_local, (AstExpr *)stmt->node);
         fprintf(f, ";");
@@ -276,7 +276,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     //     }
     // }; break;
     case STMT_PRINT: {
-        AstStmtSingle *stmt = AS_SINGLE(head);
+        AstSingle *stmt = AS_SINGLE(head);
         Str8Builder sb = make_str_builder(compiler->persist_arena); // TODO: pass arena
         /* Build printf format */
         if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
@@ -314,7 +314,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
         fprintf(f, ");");
     }; break;
     case STMT_BLOCK: {
-        AstStmtBlock *stmt = AS_BLOCK(head);
+        AstBlock *stmt = AS_BLOCK(head);
 
         write_newline_and_indent(indent);
         fprintf(f, "{");
@@ -343,7 +343,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
         fprintf(f, "}");
     }; break;
     case STMT_ASSIGNMENT: {
-        AstStmtAssignment *stmt = AS_ASSIGNMENT(head);
+        AstAssignment *stmt = AS_ASSIGNMENT(head);
         gen_expr(compiler, symt_local, stmt->left);
         fprintf(f, " = ");
         gen_expr(compiler, symt_local, stmt->right);

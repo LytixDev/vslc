@@ -298,7 +298,7 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head
         bind_expr(compiler, symt_local, AS_UNARY(head)->expr);
         break;
     case EXPR_BINARY: {
-        AstExprBinary *expr = AS_BINARY(head);
+        AstBinary *expr = AS_BINARY(head);
         bind_expr(compiler, symt_local, expr->left);
         /* Member access are bound in after typechecking */
         if (expr->op != TOKEN_DOT) {
@@ -306,7 +306,7 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head
         }
     } break;
     case EXPR_LITERAL: {
-        AstExprLiteral *lit = AS_LITERAL(head);
+        AstLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type != LIT_IDENT) {
             break;
         }
@@ -317,7 +317,7 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head
         lit->sym = sym;
     } break;
     case EXPR_CALL: {
-        AstExprCall *call = AS_CALL(head);
+        AstCall *call = AS_CALL(head);
         if (call->args == NULL) {
             break;
         }
@@ -353,13 +353,13 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
     case STMT_ABRUPT_CONTINUE:
     case STMT_ABRUPT_RETURN:
     case STMT_EXPR: {
-        AstStmtSingle *stmt = AS_SINGLE(head);
+        AstSingle *stmt = AS_SINGLE(head);
         if (stmt->node) {
             bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
         }
     }; break;
     case STMT_PRINT: {
-        AstStmtSingle *stmt = AS_SINGLE(head);
+        AstSingle *stmt = AS_SINGLE(head);
         if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
             bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
             return;
@@ -371,7 +371,7 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
         }
     }; break;
     case STMT_BLOCK: {
-        AstStmtBlock *stmt = AS_BLOCK(head);
+        AstBlock *stmt = AS_BLOCK(head);
         // TODO: blocks create new scopes
         /* Create symbols for declarations */
         for (u32 i = 0; i < stmt->declarations.len; i++) {
@@ -414,7 +414,7 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
 {
     switch (head->type) {
     case EXPR_UNARY: {
-        AstExprUnary *expr = AS_UNARY(head);
+        AstUnary *expr = AS_UNARY(head);
         TypeInfo *t = typecheck_expr(compiler, symt_local, expr->expr);
         if (expr->op == TOKEN_AMPERSAND) {
             // TODO: Should we really create a new type everytime we need a pointer type ?
@@ -437,7 +437,7 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         }
     }; break;
     case EXPR_BINARY: {
-        AstExprBinary *expr = AS_BINARY(head);
+        AstBinary *expr = AS_BINARY(head);
         TypeInfo *left = typecheck_expr(compiler, symt_local, expr->left);
         /* Member access */
         if (expr->op == TOKEN_DOT) {
@@ -470,7 +470,7 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         return head->t;
     } break;
     case EXPR_LITERAL: {
-        AstExprLiteral *lit = AS_LITERAL(head);
+        AstLiteral *lit = AS_LITERAL(head);
         if (lit->lit_type == LIT_IDENT) {
             head->t = lit->sym->type_info;
             return head->t;
@@ -481,7 +481,7 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         return head->t;
     } break;
     case EXPR_CALL: {
-        AstExprCall *call = AS_CALL(head);
+        AstCall *call = AS_CALL(head);
         Symbol *sym = symt_find_sym(symt_local, call->identifier);
         TypeInfoFunc *callee = (TypeInfoFunc *)sym->type_info;
         /* Check that enough args were supplied */
@@ -550,7 +550,7 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
         typecheck_expr(compiler, symt_local, (AstExpr *)AS_SINGLE(head)->node);
     }; break;
     case STMT_PRINT: {
-        AstStmtSingle *stmt = AS_SINGLE(head);
+        AstSingle *stmt = AS_SINGLE(head);
         if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
             typecheck_expr(compiler, symt_local, (AstExpr *)stmt->node);
         } else {
@@ -561,7 +561,7 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
         }
     }; break;
     case STMT_BLOCK: {
-        AstStmtBlock *stmt = AS_BLOCK(head);
+        AstBlock *stmt = AS_BLOCK(head);
         // TODO: blocks should create new scopes, so we need to use that here
         for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {
             typecheck_stmt(compiler, symt_local, parent_func, (AstStmt *)node->this);

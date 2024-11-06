@@ -117,7 +117,7 @@ typedef struct {
     TypeInfo *t; // @NULLABLE. Only set after typechecking.
     TokenType op;
     AstExpr *expr;
-} AstExprUnary;
+} AstUnary;
 
 typedef struct {
     AstExprType type;
@@ -125,7 +125,7 @@ typedef struct {
     AstExpr *left;
     TokenType op;
     AstExpr *right;
-} AstExprBinary;
+} AstBinary;
 
 typedef struct {
     AstExprType type;
@@ -134,14 +134,14 @@ typedef struct {
     Str8View literal; // Guranteed to be zero-terminated for STR and IDENT aka Str8
     // TODO: Unsure if this is how we want it going forward.
     Symbol *sym; // @NULLABLE. After type checking, each identifier is bound to a symbol
-} AstExprLiteral;
+} AstLiteral;
 
 typedef struct {
     AstExprType type;
     TypeInfo *t; // @NULLABLE. Only set after typechecking.
     Str8 identifier;
     AstNode *args; // @NULLABLE. List
-} AstExprCall;
+} AstCall;
 
 
 /* Statements */
@@ -149,14 +149,14 @@ typedef struct {
     AstStmtType type;
     AstExpr *condition;
     AstStmt *body;
-} AstStmtWhile;
+} AstWhile;
 
 typedef struct {
     AstStmtType type;
     AstExpr *condition;
     AstStmt *then;
     AstStmt *else_;
-} AstStmtIf;
+} AstIf;
 
 // TODO: Consider other structure than a linked-list
 typedef struct ast_list_node AstListNode;
@@ -173,19 +173,19 @@ typedef struct {
 typedef struct {
     AstStmtType type; // Abrupt, print or Expr promoted to an Stmt
     AstNode *node; // @NULLABLE
-} AstStmtSingle;
+} AstSingle;
 
 typedef struct {
     AstStmtType type;
     AstTypedVarList declarations;
     AstList *stmts;
-} AstStmtBlock;
+} AstBlock;
 
 typedef struct {
     AstStmtType type;
     AstExpr *left; // Identifier literal or array indexing (BinaryExpr)
     AstExpr *right;
-} AstStmtAssignment;
+} AstAssignment;
 
 
 /* Nodes */
@@ -223,17 +223,17 @@ typedef struct {
 } AstRoot;
 
 
-#define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
-#define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
-#define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
-#define AS_CALL(___expr) ((AstExprCall *)(___expr))
+#define AS_UNARY(___expr) ((AstUnary *)(___expr))
+#define AS_BINARY(___expr) ((AstBinary *)(___expr))
+#define AS_LITERAL(___expr) ((AstLiteral *)(___expr))
+#define AS_CALL(___expr) ((AstCall *)(___expr))
 
-#define AS_WHILE(___stmt) ((AstStmtWhile *)(___stmt))
-#define AS_IF(___stmt) ((AstStmtIf *)(___stmt))
-#define AS_ABRUPT(___stmt) ((AstStmtAbrupt *)(___stmt))
-#define AS_SINGLE(___stmt) ((AstStmtSingle *)(___stmt))
-#define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
-#define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
+#define AS_WHILE(___stmt) ((AstWhile *)(___stmt))
+#define AS_IF(___stmt) ((AstIf *)(___stmt))
+#define AS_ABRUPT(___stmt) ((AstAbrupt *)(___stmt))
+#define AS_SINGLE(___stmt) ((AstSingle *)(___stmt))
+#define AS_BLOCK(___stmt) ((AstBlock *)(___stmt))
+#define AS_ASSIGNMENT(___stmt) ((AstAssignment *)(___stmt))
 
 #define AS_NODE_VAR_LIST(___node) ((AstNodeVarList *)(___node))
 #define AS_FUNC(___node) ((AstFunc *)(___node))
@@ -245,17 +245,17 @@ typedef struct {
 extern char *node_type_str_map[AST_NODE_TYPE_LEN];
 
 /* Expresions */
-AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
-AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right);
-AstExprLiteral *make_literal(Arena *arena, Token token);
-AstExprCall *make_call(Arena *arena, Str8 identifier, AstNode *args);
+AstUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
+AstBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right);
+AstLiteral *make_literal(Arena *arena, Token token);
+AstCall *make_call(Arena *arena, Str8 identifier, AstNode *args);
 
 /* Statements */
-AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
-AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
-AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
-AstStmtBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *statements);
-AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
+AstWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
+AstIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
+AstSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
+AstBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *statements);
+AstAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
 
 /* */
 AstFunc *make_function(Arena *arena, Str8 name, AstTypedVarList parameters, AstStmt *body,

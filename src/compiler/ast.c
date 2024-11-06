@@ -31,18 +31,18 @@ char *node_type_str_map[AST_NODE_TYPE_LEN] = {
 };
 
 /* Expressions */
-AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op)
+AstUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op)
 {
-    AstExprUnary *unary = m_arena_alloc(arena, sizeof(AstExprUnary));
+    AstUnary *unary = m_arena_alloc(arena, sizeof(AstUnary));
     unary->type = EXPR_UNARY;
     unary->op = op;
     unary->expr = expr;
     return unary;
 }
 
-AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
+AstBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
 {
-    AstExprBinary *binary = m_arena_alloc(arena, sizeof(AstExprBinary));
+    AstBinary *binary = m_arena_alloc(arena, sizeof(AstBinary));
     binary->type = EXPR_BINARY;
     binary->op = op;
     binary->left = left;
@@ -50,9 +50,9 @@ AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *r
     return binary;
 }
 
-AstExprLiteral *make_literal(Arena *arena, Token token)
+AstLiteral *make_literal(Arena *arena, Token token)
 {
-    AstExprLiteral *literal = m_arena_alloc(arena, sizeof(AstExprLiteral));
+    AstLiteral *literal = m_arena_alloc(arena, sizeof(AstLiteral));
     literal->type = EXPR_LITERAL;
     literal->literal = token.lexeme;
     if (token.type == TOKEN_NUM) {
@@ -65,9 +65,9 @@ AstExprLiteral *make_literal(Arena *arena, Token token)
     return literal;
 }
 
-AstExprCall *make_call(Arena *arena, Str8View identifier, AstNode *args)
+AstCall *make_call(Arena *arena, Str8View identifier, AstNode *args)
 {
-    AstExprCall *call = m_arena_alloc(arena, sizeof(AstExprCall));
+    AstCall *call = m_arena_alloc(arena, sizeof(AstCall));
     call->type = EXPR_CALL;
     call->identifier = identifier;
     call->args = args;
@@ -75,18 +75,18 @@ AstExprCall *make_call(Arena *arena, Str8View identifier, AstNode *args)
 }
 
 /* Statements */
-AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body)
+AstWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body)
 {
-    AstStmtWhile *stmt = m_arena_alloc(arena, sizeof(AstStmtWhile));
+    AstWhile *stmt = m_arena_alloc(arena, sizeof(AstWhile));
     stmt->type = STMT_WHILE;
     stmt->condition = condition;
     stmt->body = body;
     return stmt;
 }
 
-AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_)
+AstIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_)
 {
-    AstStmtIf *stmt = m_arena_alloc(arena, sizeof(AstStmtIf));
+    AstIf *stmt = m_arena_alloc(arena, sizeof(AstIf));
     stmt->type = STMT_IF;
     stmt->condition = condition;
     stmt->then = then;
@@ -94,26 +94,26 @@ AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *els
     return stmt;
 }
 
-AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list)
+AstSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list)
 {
-    AstStmtSingle *stmt = m_arena_alloc(arena, sizeof(AstStmtSingle));
+    AstSingle *stmt = m_arena_alloc(arena, sizeof(AstSingle));
     stmt->type = single_type;
     stmt->node = print_list;
     return stmt;
 }
 
-AstStmtBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *stmts)
+AstBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *stmts)
 {
-    AstStmtBlock *stmt = m_arena_alloc(arena, sizeof(AstStmtBlock));
+    AstBlock *stmt = m_arena_alloc(arena, sizeof(AstBlock));
     stmt->type = STMT_BLOCK;
     stmt->declarations = declarations;
     stmt->stmts = stmts;
     return stmt;
 }
 
-AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
+AstAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 {
-    AstStmtAssignment *stmt = m_arena_alloc(arena, sizeof(AstStmtAssignment));
+    AstAssignment *stmt = m_arena_alloc(arena, sizeof(AstAssignment));
     stmt->type = STMT_ASSIGNMENT;
     stmt->left = left;
     stmt->right = right;
@@ -226,13 +226,13 @@ static void ast_print_expr(AstExpr *head, u32 indent)
 
     switch (head->type) {
     case EXPR_UNARY: {
-        AstExprUnary *unary = AS_UNARY(head);
+        AstUnary *unary = AS_UNARY(head);
         char *op_text_repr = token_type_str_map[unary->op];
         printf("%s", op_text_repr);
         ast_print_expr(unary->expr, indent + 1);
     } break;
     case EXPR_BINARY: {
-        AstExprBinary *binary = AS_BINARY(head);
+        AstBinary *binary = AS_BINARY(head);
         char *op_text_repr = token_type_str_map[binary->op];
         putchar('\n');
         print_indent(indent + 1);
@@ -241,14 +241,14 @@ static void ast_print_expr(AstExpr *head, u32 indent)
         ast_print_expr(binary->right, indent + 1);
     } break;
     case EXPR_LITERAL: {
-        AstExprLiteral *lit = AS_LITERAL(head);
+        AstLiteral *lit = AS_LITERAL(head);
         printf("%.*s", STR8VIEW_PRINT(lit->literal));
         if (lit->sym != NULL) {
             printf(" (bound to %d)", lit->sym->seq_no);
         }
     } break;
     case EXPR_CALL: {
-        AstExprCall *call = AS_CALL(head);
+        AstCall *call = AS_CALL(head);
         printf("%.*s", STR8VIEW_PRINT(call->identifier));
         if (call->args) {
             ast_print(call->args, indent + 1);
@@ -268,12 +268,12 @@ void ast_print_stmt(AstStmt *head, u32 indent)
     printf("%s", node_type_str_map[head->type]);
     switch (head->type) {
     case STMT_WHILE: {
-        AstStmtWhile *stmt = AS_WHILE(head);
+        AstWhile *stmt = AS_WHILE(head);
         ast_print_expr(stmt->condition, indent + 1);
         ast_print_stmt(stmt->body, indent + 1);
     }; break;
     case STMT_IF: {
-        AstStmtIf *stmt = AS_IF(head);
+        AstIf *stmt = AS_IF(head);
         ast_print_expr(stmt->condition, indent + 1);
         ast_print_stmt(stmt->then, indent + 1);
         if (stmt->else_ != NULL) {
@@ -285,19 +285,19 @@ void ast_print_stmt(AstStmt *head, u32 indent)
     case STMT_ABRUPT_RETURN:
     case STMT_EXPR:
     case STMT_PRINT: {
-        AstStmtSingle *stmt = AS_SINGLE(head);
+        AstSingle *stmt = AS_SINGLE(head);
         if (stmt->node != NULL) {
             ast_print(stmt->node, indent + 1);
         }
     }; break;
     case STMT_BLOCK: {
-        AstStmtBlock *stmt = AS_BLOCK(head);
+        AstBlock *stmt = AS_BLOCK(head);
         printf(" vars=");
         ast_print_typed_var_list(stmt->declarations);
         ast_print((AstNode *)stmt->stmts, indent + 1);
     }; break;
     case STMT_ASSIGNMENT: {
-        AstStmtAssignment *stmt = AS_ASSIGNMENT(head);
+        AstAssignment *stmt = AS_ASSIGNMENT(head);
         ast_print_expr(stmt->left, indent + 1);
         ast_print_expr(stmt->right, indent + 1);
     }; break;

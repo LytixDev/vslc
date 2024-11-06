@@ -180,7 +180,7 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
     };
 }
 
-static AstExprCall *parse_call(Parser *parser, Token identifier)
+static AstCall *parse_call(Parser *parser, Token identifier)
 {
     /* Came from TOKEN_IDENTIFIER and then peeked TOKEN_LPAREN */
     next_token(parser);
@@ -237,7 +237,7 @@ static AstExpr *parse_primary(Parser *parser)
     }
 }
 
-static AstExprBinary *parse_member_access(Parser *parser, AstExpr *left)
+static AstBinary *parse_member_access(Parser *parser, AstExpr *left)
 {
     // NOTE: Temporary hack for LHS of assignment.
     /* Came from '.' aka TOKEN_DOT */
@@ -287,7 +287,7 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
     return left;
 }
 
-static AstExprBinary *parse_relation(Parser *parser)
+static AstBinary *parse_relation(Parser *parser)
 {
     AstExpr *left = parse_expr(parser, 0);
     Token op = peek_token(parser);
@@ -332,7 +332,7 @@ static AstNode *parse_expr_list(Parser *parser)
 
 
 /* Parsing of statements */
-static AstStmtWhile *parse_while(Parser *parser)
+static AstWhile *parse_while(Parser *parser)
 {
     /* Came from TOKEN_WHILE */
     AstExpr *condition = (AstExpr *)parse_relation(parser);
@@ -341,7 +341,7 @@ static AstStmtWhile *parse_while(Parser *parser)
     return make_while(parser->arena, condition, body);
 }
 
-static AstStmtIf *parse_if(Parser *parser)
+static AstIf *parse_if(Parser *parser)
 {
     /* Came from TOKEN_IF */
     AstExpr *condition = (AstExpr *)parse_relation(parser);
@@ -354,7 +354,7 @@ static AstStmtIf *parse_if(Parser *parser)
     return make_if(parser->arena, condition, then, else_);
 }
 
-static AstStmtBlock *parse_block(Parser *parser)
+static AstBlock *parse_block(Parser *parser)
 {
     /* Came from TOKEN_BLOCK */
     AstTypedVarList declarations = { 0 };
