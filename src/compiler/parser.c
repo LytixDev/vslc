@@ -75,7 +75,18 @@ static AstTypedVarList parse_local_decl_list(Parser *parser);
 static Token next_token(Parser *parser)
 {
     Token token = lex_next(parser->lex_arena, &parser->lexer);
-#ifdef DEBUG
+    /*
+     * NOTE on error handling:
+     * There is no proper strategy in the parser for error recovery. Once we detect a error lex
+     * error, the strategy is to give a reasonable error message and then exit. On detecting a
+     * parse error, we optimistically continue parsing the whole source. This leads to many false
+     * positives. Down the line, it would be nice to have a proper error recovery strategy.
+     */
+    if (token.type == TOKEN_ERR) {
+        printf("%s\n ... Exiting ...\n", parser->lexer.e->tail->msg.str);
+        exit(1);
+    }
+#ifdef DEBUG_PARSER
     printf("Consumed: %s\n", token_type_str_map[token.type]);
 #endif
     return token;
@@ -83,16 +94,14 @@ static Token next_token(Parser *parser)
 
 static Token peek_token(Parser *parser)
 {
-    // TODO: if we need more lookahead, this must change
-    // assert(!parser->lexer.has_next);
+    /* NOTE: if we need more than one token of lookahead, this must change */
     Token token = lex_peek(parser->lex_arena, &parser->lexer);
-    // #ifdef DEBUG
-    //     printf("Peek: %s\n", token_type_str_map[token.type]);
-    // #endif
+#ifdef DEBUG_PARSER
+    printf("Peek: %s\n", token_type_str_map[token.type]);
+#endif
     return token;
 }
 
-// TODO: use this in more places
 static bool match_token(Parser *parser, TokenType type)
 {
     if (peek_token(parser).type == type) {
@@ -135,7 +144,6 @@ static Token consume_or_err(Parser *parser, TokenType expected, char *msg)
 {
     Token token = peek_token(parser);
     if (token.type != expected) {
-        // next_token(parser);
         error_parse(parser->lexer.e, msg, token);
         return (Token){ .type = TOKEN_ERR };
     }
@@ -224,8 +232,8 @@ static AstExpr *parse_primary(Parser *parser)
         }
     }
     default:
-        // TODO: gracefully continue
-        ASSERT_NOT_REACHED;
+        error_parse(parser->lexer.e, "Invalid start of a primary expression", token);
+        return NULL;
     }
 }
 
@@ -270,7 +278,7 @@ static AstExpr *parse_expr(Parser *parser, u32 precedence)
     AstExpr *expr;
     while (1) {
         expr = parse_increasing_precedence(parser, left, precedence);
-        if (expr == left) // pointer comparison
+        if (expr == left) /* pointer comparison */
             break;
 
         left = expr;
@@ -478,7 +486,6 @@ static AstTypedVarList parse_local_decl_list(Parser *parser)
 static AstFunc *parse_func(Parser *parser)
 {
     /* Came from TOKEN_FUNC */
-    // consume_or_err(parser, TOKEN_FUNC, PET_CUSTOM);
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected function name");
 
     consume_or_err(parser, TOKEN_LPAREN, "Expected '(' to start function parameter list");

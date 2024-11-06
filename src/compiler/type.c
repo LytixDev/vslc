@@ -345,7 +345,9 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
     case STMT_IF:
         bind_expr(compiler, symt_local, AS_IF(head)->condition);
         bind_stmt(compiler, symt_local, AS_IF(head)->then);
-        bind_stmt(compiler, symt_local, AS_IF(head)->else_);
+        if (AS_IF(head)->else_ != NULL) {
+            bind_stmt(compiler, symt_local, AS_IF(head)->else_);
+        }
         break;
     case STMT_ABRUPT_BREAK:
     case STMT_ABRUPT_CONTINUE:
@@ -533,7 +535,9 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
     case STMT_IF:
         typecheck_expr(compiler, symt_local, AS_IF(head)->condition);
         typecheck_stmt(compiler, symt_local, parent_func, AS_IF(head)->then);
-        typecheck_stmt(compiler, symt_local, parent_func, AS_IF(head)->else_);
+        if (AS_IF(head)->else_) {
+            typecheck_stmt(compiler, symt_local, parent_func, AS_IF(head)->else_);
+        }
         break;
     case STMT_ABRUPT_RETURN: {
         TypeInfo *ret = typecheck_expr(compiler, symt_local, AS_IF(head)->condition);

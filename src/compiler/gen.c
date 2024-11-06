@@ -178,6 +178,18 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         case TOKEN_DOT:
             fprintf(f, ".");
             break;
+        case TOKEN_EQ:
+            fprintf(f, "==");
+            break;
+        case TOKEN_NEQ:
+            fprintf(f, "!=");
+            break;
+        case TOKEN_LESS:
+            fprintf(f, "<");
+            break;
+        case TOKEN_GREATER:
+            fprintf(f, "<");
+            break;
         default:
             ASSERT_NOT_REACHED;
         }
@@ -235,11 +247,20 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     //     bind_expr(compiler, symt_local, AS_WHILE(head)->condition);
     //     bind_stmt(compiler, symt_local, AS_WHILE(head)->body);
     //     break;
-    // case STMT_IF:
-    //     bind_expr(compiler, symt_local, AS_IF(head)->condition);
-    //     bind_stmt(compiler, symt_local, AS_IF(head)->then);
-    //     bind_stmt(compiler, symt_local, AS_IF(head)->else_);
-    //     break;
+    case STMT_IF: {
+        AstStmtIf *stmt = AS_IF(head);
+        fprintf(f, "if (");
+        gen_expr(compiler, symt_local, stmt->condition);
+        fprintf(f, ") {");
+        gen_stmt(compiler, symt_local, stmt->then, indent + 2);
+        if (stmt->else_) {
+            write_newline_and_indent(indent);
+            fprintf(f, "} else ");
+            gen_stmt(compiler, symt_local, stmt->else_, indent + 2);
+        }
+        write_newline_and_indent(indent);
+        fprintf(f, "}");
+    } break;
     // case STMT_ABRUPT_BREAK:
     // case STMT_ABRUPT_CONTINUE:
     case STMT_ABRUPT_RETURN: {
