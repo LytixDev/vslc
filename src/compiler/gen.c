@@ -138,7 +138,7 @@ static void gen_struct(Compiler *compiler, Symbol *sym)
 
 static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 {
-    switch (head->type) {
+    switch (head->kind) {
     // case EXPR_UNARY:
     //     bind_expr(compiler, symt_local, AS_UNARY(head)->expr);
     //     break;
@@ -218,7 +218,7 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         AstCall *call = AS_CALL(head);
         fprintf(f, "%s(", call->identifier.str);
         if (call->args != NULL) {
-            if ((u32)call->args->type == (u32)EXPR_LITERAL) {
+            if ((u32)call->args->kind == (u32)EXPR_LITERAL) {
                 gen_expr(compiler, symt_local, (AstExpr *)call->args);
             } else {
                 AstList *args = (AstList *)call->args;
@@ -242,7 +242,7 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head, u32 indent)
 {
     write_newline_and_indent(indent);
-    switch (head->type) {
+    switch (head->kind) {
     // case STMT_WHILE:
     //     bind_expr(compiler, symt_local, AS_WHILE(head)->condition);
     //     bind_stmt(compiler, symt_local, AS_WHILE(head)->body);
@@ -309,7 +309,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
 
         /* Declarations */
         for (u32 i = 0; i < stmt->declarations.len; i++) {
-            AstTypedVar decl = stmt->declarations.vars[i];
+            TypedIdent decl = stmt->declarations.vars[i];
             Symbol *sym = symt_find_sym(symt_local, decl.name);
             Str8 type_name = type_info_to_c_type_name(compiler, sym->type_info);
             /*

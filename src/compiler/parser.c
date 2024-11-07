@@ -18,7 +18,6 @@
 #include <string.h>
 
 #include "ast.h"
-#include "base/base.h"
 #include "base/sac_single.h"
 #include "error.h"
 #include "lex.h"
@@ -69,7 +68,7 @@ TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
 static AstExpr *parse_expr(Parser *parser, u32 precedence);
 static AstList *parse_expr_list(Parser *parser);
 static AstStmt *parse_stmt(Parser *parser);
-static AstTypedVarList parse_local_decl_list(Parser *parser);
+static TypedIdentList parse_local_decl_list(Parser *parser);
 
 /* Wrapper so we can print the token in debug mode */
 static Token next_token(Parser *parser)
@@ -358,7 +357,7 @@ static AstIf *parse_if(Parser *parser)
 static AstBlock *parse_block(Parser *parser)
 {
     /* Came from TOKEN_BLOCK */
-    AstTypedVarList declarations = { 0 };
+    TypedIdentList declarations = { 0 };
     if (match_token(parser, TOKEN_VAR)) {
         declarations = parse_local_decl_list(parser);
     }
@@ -394,7 +393,7 @@ static AstStmt *parse_stmt(Parser *parser)
         return (AstStmt *)parse_if(parser);
     case TOKEN_PRINT: {
         AstList *print_list = parse_expr_list(parser);
-        print_list->type = (AstNodeType)STMT_PRINT;
+        print_list->kind = (AstNodeKind)STMT_PRINT;
         return (AstStmt *)print_list;
         // return (AstStmt *)make_single(parser->arena, STMT_PRINT, print_list);
     }
@@ -442,12 +441,12 @@ static AstStmt *parse_stmt(Parser *parser)
     }
 }
 
-static AstTypedVarList parse_variable_list(Parser *parser, bool allow_array_types, bool typed)
+static TypedIdentList parse_variable_list(Parser *parser, bool allow_array_types, bool typed)
 {
-    AstTypedVarList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, AstTypedVar),
+    TypedIdentList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, TypedIdent),
                                    .len = 0 };
 
-    AstTypedVar *indices_head = typed_vars.vars;
+    TypedIdent *indices_head = typed_vars.vars;
     do {
         /*
          * If not first iteration of loop then we need to consume the comma we already peeked and
@@ -455,14 +454,14 @@ static AstTypedVarList parse_variable_list(Parser *parser, bool allow_array_type
          */
         if (typed_vars.len != 0) {
             next_token(parser);
-            indices_head = m_arena_alloc_struct(parser->arena, AstTypedVar);
+            indices_head = m_arena_alloc_struct(parser->arena, TypedIdent);
         }
         Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected variable name");
         AstTypeInfo type_info = { 0 };
         if (typed) {
             type_info = parse_type(parser, allow_array_types);
         }
-        AstTypedVar new = { .name = identifier.lexeme, .ast_type_info = type_info };
+        TypedIdent new = { .name = identifier.lexeme, .ast_type_info = type_info };
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
         typed_vars.len++;
@@ -471,12 +470,12 @@ static AstTypedVarList parse_variable_list(Parser *parser, bool allow_array_type
     return typed_vars;
 }
 
-static AstTypedVarList parse_local_decl_list(Parser *parser)
+static TypedIdentList parse_local_decl_list(Parser *parser)
 {
     /* Came from TOKEN_VAR */
-    AstTypedVarList identifiers = parse_variable_list(parser, false, true);
+    TypedIdentList identifiers = parse_variable_list(parser, false, true);
     while (match_token(parser, TOKEN_VAR)) {
-        AstTypedVarList next_identifiers = parse_variable_list(parser, false, true);
+        TypedIdentList next_identifiers = parse_variable_list(parser, false, true);
         /*
          * Since parse_variable_list ensures the identifiers are stored contigiously, and we do no
          * other allocations on the parser arena, consequetive retain this contigious property.
@@ -492,7 +491,7 @@ static AstFunc *parse_func(Parser *parser)
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected function name");
 
     consume_or_err(parser, TOKEN_LPAREN, "Expected '(' to start function parameter list");
-    AstTypedVarList vars = { 0 };
+    TypedIdentList vars = { 0 };
     if (peek_token(parser).type != TOKEN_RPAREN) {
         vars = parse_variable_list(parser, true, true);
     }
@@ -506,18 +505,18 @@ static AstFunc *parse_func(Parser *parser)
 
 static AstRoot *parse_root(Parser *parser)
 {
-    AstList vars = { .type = AST_LIST, .head = NULL, .tail = NULL };
-    AstList funcs = { .type = AST_LIST, .head = NULL, .tail = NULL };
-    AstList structs = { .type = AST_LIST, .head = NULL, .tail = NULL };
-    AstList enums = { .type = AST_LIST, .head = NULL, .tail = NULL };
+    AstList vars = { .kind = AST_LIST, .head = NULL, .tail = NULL };
+    AstList funcs = { .kind = AST_LIST, .head = NULL, .tail = NULL };
+    AstList structs = { .kind = AST_LIST, .head = NULL, .tail = NULL };
+    AstList enums = { .kind = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
     while ((next = next_token(parser)).type != TOKEN_EOF) {
         switch (next.type) {
         case TOKEN_VAR: {
             /* Parse global declarations list */
-            AstTypedVarList v = parse_variable_list(parser, true, true);
-            AstNodeVarList *node_vars = make_node_var_list(parser->arena, v);
+            TypedIdentList v = parse_variable_list(parser, true, true);
+            AstTypedIdentList *node_vars = make_typed_ident_list(parser->arena, v);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
             ast_list_push_back(&vars, node_node);
         }; break;
@@ -529,7 +528,7 @@ static AstRoot *parse_root(Parser *parser)
         case TOKEN_STRUCT: {
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected struct name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after struct name");
-            AstTypedVarList members = parse_variable_list(parser, true, true);
+            TypedIdentList members = parse_variable_list(parser, true, true);
             AstStruct *struct_decl = make_struct(parser->arena, name.lexeme, members);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)struct_decl);
             ast_list_push_back(&structs, node_node);
@@ -537,7 +536,7 @@ static AstRoot *parse_root(Parser *parser)
         case TOKEN_ENUM: {
             Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected enum name");
             consume_or_err(parser, TOKEN_ASSIGNMENT, "Expected ':=' after enum name");
-            AstTypedVarList values = parse_variable_list(parser, true, false);
+            TypedIdentList values = parse_variable_list(parser, true, false);
             AstEnum *enum_decl = make_enum(parser->arena, name.lexeme, values);
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)enum_decl);
             ast_list_push_back(&enums, node_node);

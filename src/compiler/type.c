@@ -232,7 +232,7 @@ static void enum_decl_to_type(Compiler *compiler, AstEnum *decl)
     t->member_names = m_arena_alloc(arena, sizeof(Str8) * decl->members.len);
     t->members_len = decl->members.len;
     for (u32 i = 0; i < decl->members.len; i++) {
-        AstTypedVar tv = decl->members.vars[i];
+        TypedIdent tv = decl->members.vars[i];
         t->member_names[i] = tv.name;
         symt_new_sym(compiler, symt_local, SYMBOL_MEMBER, tv.name, (TypeInfo *)t, (AstNode *)decl);
     }
@@ -249,7 +249,7 @@ static void struct_decl_to_type(Compiler *compiler, AstStruct *decl)
     t->members_len = decl->members.len;
 
     for (u32 i = 0; i < decl->members.len; i++) {
-        AstTypedVar tv = decl->members.vars[i];
+        TypedIdent tv = decl->members.vars[i];
         TypeInfoStructMember *member = m_arena_alloc(arena, sizeof(TypeInfoStructMember));
         t->members[i] = member;
         member->is_resolved = false;
@@ -281,7 +281,7 @@ static void func_decl_to_type(Compiler *compiler, AstFunc *decl)
     }
 
     for (u32 i = 0; i < decl->parameters.len; i++) {
-        AstTypedVar tv = decl->parameters.vars[i];
+        TypedIdent tv = decl->parameters.vars[i];
         t->param_names[i] = tv.name;
         TypeInfo *param_t = ast_type_resolve(compiler, tv.ast_type_info, true);
         if (param_t == NULL) {
@@ -293,7 +293,7 @@ static void func_decl_to_type(Compiler *compiler, AstFunc *decl)
 
 static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 {
-    switch (head->type) {
+    switch (head->kind) {
     case EXPR_UNARY:
         bind_expr(compiler, symt_local, AS_UNARY(head)->expr);
         break;
@@ -321,7 +321,7 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head
         if (call->args == NULL) {
             break;
         }
-        if ((u32)call->args->type == (u32)EXPR_LITERAL) {
+        if ((u32)call->args->kind == (u32)EXPR_LITERAL) {
             bind_expr(compiler, symt_local, (AstExpr *)call->args);
         } else {
             AstList *args = (AstList *)call->args;
@@ -337,7 +337,7 @@ static void bind_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head
 
 static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head)
 {
-    switch (head->type) {
+    switch (head->kind) {
     case STMT_WHILE:
         bind_expr(compiler, symt_local, AS_WHILE(head)->condition);
         bind_stmt(compiler, symt_local, AS_WHILE(head)->body);
@@ -369,7 +369,7 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
         // TODO: blocks create new scopes
         /* Create symbols for declarations */
         for (u32 i = 0; i < stmt->declarations.len; i++) {
-            AstTypedVar decl = stmt->declarations.vars[i];
+            TypedIdent decl = stmt->declarations.vars[i];
             TypeInfo *decl_type = ast_type_resolve(compiler, decl.ast_type_info, true);
             symt_new_sym(compiler, symt_local, SYMBOL_LOCAL_VAR, decl.name, decl_type,
                          (AstNode *)stmt);
@@ -394,7 +394,7 @@ static void bind_function(Compiler *compiler, AstFunc *func)
 
     /* Create symbols for function parameters */
     for (u32 i = 0; i < func->parameters.len; i++) {
-        AstTypedVar param = func->parameters.vars[i];
+        TypedIdent param = func->parameters.vars[i];
         TypeInfo *param_type = ast_type_resolve(compiler, param.ast_type_info, true);
         symt_new_sym(compiler, &func_sym->symt_local, SYMBOL_PARAM, param.name, param_type,
                      (AstNode *)func);
@@ -406,7 +406,7 @@ static void bind_function(Compiler *compiler, AstFunc *func)
 
 static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 {
-    switch (head->type) {
+    switch (head->kind) {
     case EXPR_UNARY: {
         AstUnary *expr = AS_UNARY(head);
         TypeInfo *t = typecheck_expr(compiler, symt_local, expr->expr);
@@ -521,7 +521,7 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
 static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfoFunc *parent_func,
                            AstStmt *head)
 {
-    switch (head->type) {
+    switch (head->kind) {
     case STMT_WHILE:
         typecheck_expr(compiler, symt_local, AS_WHILE(head)->condition);
         typecheck_stmt(compiler, symt_local, parent_func, AS_WHILE(head)->body);
@@ -857,9 +857,9 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         func_decl_to_type(compiler, func_decl);
     }
     for (AstListNode *node = root->vars.head; node != NULL; node = node->next) {
-        AstTypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
+        TypedIdentList vars = AS_TYPED_IDENT_LIST(node->this)->idents;
         for (u32 i = 0; i < vars.len; i++) {
-            AstTypedVar typed_var = vars.vars[i];
+            TypedIdent typed_var = vars.vars[i];
             TypeInfo *t = ast_type_resolve(compiler, typed_var.ast_type_info, true);
             symt_new_sym(compiler, &compiler->symt_root, SYMBOL_GLOBAL_VAR, typed_var.name,
                          (TypeInfo *)t, node->this);
