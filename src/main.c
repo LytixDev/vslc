@@ -57,7 +57,7 @@ u32 run(char *input)
     ast_print((AstNode *)ast_root, 0);
     putchar('\n');
 
-    // transpile_to_c(&compiler);
+    transpile_to_c(&compiler);
 
 done:
     error_handler_release(&e);

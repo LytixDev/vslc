@@ -286,11 +286,16 @@ void ast_print_stmt(AstStmt *head, u32 indent)
     case STMT_BREAK:
     case STMT_CONTINUE:
     case STMT_RETURN:
-    case STMT_EXPR:
-    case STMT_PRINT: {
+    case STMT_EXPR: {
         AstSingle *stmt = AS_SINGLE(head);
         if (stmt->node != NULL) {
             ast_print(stmt->node, indent + 1);
+        }
+    }; break;
+    case STMT_PRINT: {
+        AstList *list = AS_LIST(head);
+        for (AstListNode *node = list->head; node != NULL; node = node->next) {
+            ast_print(node->this, indent + 1);
         }
     }; break;
     case STMT_BLOCK: {

@@ -160,6 +160,9 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         }
 
         fprintf(f, "(");
+        if (expr->left->t->kind == TYPE_POINTER && expr->op == TOKEN_DOT) {
+            fprintf(f, "*");
+        }
         gen_expr(compiler, symt_local, expr->left);
         fprintf(f, ")");
 

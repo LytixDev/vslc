@@ -416,7 +416,6 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         AstUnary *expr = AS_UNARY(head);
         TypeInfo *t = typecheck_expr(compiler, symt_local, expr->expr);
         if (expr->op == TOKEN_AMPERSAND) {
-            // TODO: Should we really create a new type everytime we need a pointer type ?
             TypeInfoPointer *tp =
                 make_type_info(compiler->persist_arena, TYPE_POINTER, t->generated_by_name);
             tp->info.is_resolved = true;
@@ -440,6 +439,9 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         TypeInfo *left = typecheck_expr(compiler, symt_local, expr->left);
         /* Member access */
         if (expr->op == TOKEN_DOT) {
+            if (left->kind == TYPE_POINTER) {
+                left = ((TypeInfoPointer *)left)->pointer_to;
+            }
             if (!(left->kind == TYPE_STRUCT || left->kind == TYPE_ENUM)) {
                 error_typecheck_binary(compiler->e, "Has no members", (AstNode *)head, left, left);
                 head->t = left;
