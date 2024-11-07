@@ -111,7 +111,7 @@ static Token emit(Lexer *lexer, TokenKind type)
 static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenKind type)
 {
     Token token = emit(lexer, type);
-    Str8 final = str_builder_end(sb);
+    Str8 final = str_builder_end(sb, false);
     token.lexeme = final;
     return token;
 }

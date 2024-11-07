@@ -77,7 +77,7 @@ static Str8 type_info_to_c_type_name(Compiler *compiler, TypeInfo *t)
     if (t->kind == TYPE_ENUM) {
         str_builder_append_cstr(&sb, "enum ", 5);
     }
-    str_builder_append_cstr(&sb, (char *)t->generated_by_name.str, t->generated_by_name.len);
+    str_builder_append_cstr(&sb, (char *)t->generated_by.str, t->generated_by.len);
     if (t->kind == TYPE_ARRAY) {
         str_builder_sprintf(&sb, "[%d]", 1, arr_elements);
     }
@@ -87,7 +87,7 @@ static Str8 type_info_to_c_type_name(Compiler *compiler, TypeInfo *t)
             str_builder_append_u8(&sb, '*');
         }
     }
-    return str_builder_end(&sb);
+    return str_builder_end(&sb, false);
 }
 
 static u8 type_info_to_printf_format(TypeInfo *t)
@@ -133,10 +133,10 @@ static void gen_struct(Compiler *compiler, Symbol *sym)
             if (type_as_array->element_type->kind == TYPE_POINTER) {
                 ptr_modifier = "*";
             }
-            fprintf(f, "\t%s %s%s[%d];\n", m_t->generated_by_name.str, ptr_modifier, m->name.str,
+            fprintf(f, "\t%s %s%s[%d];\n", m_t->generated_by.str, ptr_modifier, m->name.str,
                     type_as_array->elements);
         } else {
-            fprintf(f, "\t%s %s%s;\n", m_t->generated_by_name.str, ptr_modifier, m->name.str);
+            fprintf(f, "\t%s %s%s;\n", m_t->generated_by.str, ptr_modifier, m->name.str);
         }
     }
 
@@ -154,7 +154,7 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 
         if (expr->op == TOKEN_DOT && expr->t->kind == TYPE_ENUM) {
             TypeInfoEnum *t = (TypeInfoEnum *)expr->t;
-            fprintf(f, "%s_", t->info.generated_by_name.str);
+            fprintf(f, "%s_", t->info.generated_by.str);
             gen_expr(compiler, symt_local, expr->right);
             break;
         }
@@ -297,7 +297,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
                 str_builder_append_u8(&sb, ' ');
             }
         }
-        Str8 fmt = str_builder_end(&sb);
+        Str8 fmt = str_builder_end(&sb, false);
 
         fprintf(f, "printf(\"%s\\n\", ", fmt.str);
 

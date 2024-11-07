@@ -130,10 +130,11 @@ void str_builder_sprintf(Str8Builder *sb, char *fmt, int count, ...)
     va_end(args);
 }
 
-Str8 str_builder_end(Str8Builder *sb)
+Str8 str_builder_end(Str8Builder *sb, bool add_null_terminator)
 {
-    // TODO: Remove this quirk, or make it more apparent:
-    // Return sb->str, but len does not include null terminator
+    if (add_null_terminator) {
+        str_builder_append_u8(sb, 0);
+    }
     Str8 final = sb->str;
     assert(final.str[final.len] == 0);
     assert(final.len != 0);

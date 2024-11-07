@@ -36,12 +36,12 @@ typedef enum {
 typedef struct type_info_t {
     TypeInfoKind kind;
     bool is_resolved;
-    Str8 generated_by_name; // Not used by TYPE_ARRAY
+    Str8 generated_by; // Name of the symbol that generated this type. Not used by TYPE_ARRAY
 } TypeInfo;
 
 typedef struct {
     TypeInfo info;
-    u32 size;
+    u32 bit_size;
     bool is_signed;
 } TypeInfoInteger;
 
@@ -117,6 +117,7 @@ struct symbol_table_t {
     u32 sym_len;
     u32 sym_cap;
 
+    // TODO: SOA? List of Struct types, Enum types ...
     TypeInfo **types;
     u32 type_len;
     u32 type_cap;
