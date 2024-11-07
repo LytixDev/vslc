@@ -263,7 +263,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     } break;
     // case STMT_ABRUPT_BREAK:
     // case STMT_ABRUPT_CONTINUE:
-    case STMT_ABRUPT_RETURN: {
+    case STMT_RETURN: {
         AstSingle *stmt = AS_SINGLE(head);
         fprintf(f, "return ");
         gen_expr(compiler, symt_local, (AstExpr *)stmt->node);
@@ -276,41 +276,27 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     //     }
     // }; break;
     case STMT_PRINT: {
-        AstSingle *stmt = AS_SINGLE(head);
+        AstList *stmt = AS_LIST(head);
         Str8Builder sb = make_str_builder(compiler->persist_arena); // TODO: pass arena
         /* Build printf format */
-        if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
-            TypeInfo *t = ((AstExpr *)stmt->node)->t;
+        for (AstListNode *node = stmt->head; node != NULL; node = node->next) {
             str_builder_append_u8(&sb, '%');
-            str_builder_append_u8(&sb, type_info_to_printf_format(t));
-        } else {
-            AstList *args = (AstList *)stmt->node;
-            for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                str_builder_append_u8(&sb, '%');
-                str_builder_append_u8(&sb, type_info_to_printf_format(((AstExpr *)node->this)->t));
-                if (node->next != NULL) {
-                    str_builder_append_u8(&sb, ',');
-                    str_builder_append_u8(&sb, ' ');
-                }
+            str_builder_append_u8(&sb, type_info_to_printf_format(((AstExpr *)node->this)->t));
+            if (node->next != NULL) {
+                str_builder_append_u8(&sb, ',');
+                str_builder_append_u8(&sb, ' ');
             }
         }
-
         Str8 fmt = str_builder_end(&sb);
 
         fprintf(f, "printf(\"%s\\n\", ", fmt.str);
 
-        if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
-            gen_expr(compiler, symt_local, (AstExpr *)stmt->node);
-        } else {
-            AstList *args = (AstList *)stmt->node;
-            for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                gen_expr(compiler, symt_local, (AstExpr *)node->this);
-                if (node->next != NULL) {
-                    fprintf(f, ", ");
-                }
+        for (AstListNode *node = stmt->head; node != NULL; node = node->next) {
+            gen_expr(compiler, symt_local, (AstExpr *)node->this);
+            if (node->next != NULL) {
+                fprintf(f, ", ");
             }
         }
-
         fprintf(f, ");");
     }; break;
     case STMT_BLOCK: {

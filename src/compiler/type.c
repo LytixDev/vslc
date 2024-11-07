@@ -349,9 +349,9 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
             bind_stmt(compiler, symt_local, AS_IF(head)->else_);
         }
         break;
-    case STMT_ABRUPT_BREAK:
-    case STMT_ABRUPT_CONTINUE:
-    case STMT_ABRUPT_RETURN:
+    case STMT_BREAK:
+    case STMT_CONTINUE:
+    case STMT_RETURN:
     case STMT_EXPR: {
         AstSingle *stmt = AS_SINGLE(head);
         if (stmt->node) {
@@ -359,15 +359,9 @@ static void bind_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head
         }
     }; break;
     case STMT_PRINT: {
-        AstSingle *stmt = AS_SINGLE(head);
-        if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
-            bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
-            return;
-        } else {
-            AstList *args = (AstList *)stmt->node;
-            for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                bind_expr(compiler, symt_local, (AstExpr *)node->this);
-            }
+        AstList *stmt = AS_LIST(head);
+        for (AstListNode *node = stmt->head; node != NULL; node = node->next) {
+            bind_expr(compiler, symt_local, (AstExpr *)node->this);
         }
     }; break;
     case STMT_BLOCK: {
@@ -539,7 +533,7 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
             typecheck_stmt(compiler, symt_local, parent_func, AS_IF(head)->else_);
         }
         break;
-    case STMT_ABRUPT_RETURN: {
+    case STMT_RETURN: {
         TypeInfo *ret = typecheck_expr(compiler, symt_local, AS_IF(head)->condition);
         if (!type_info_equal(ret, parent_func->return_type)) {
             error_typecheck_binary(compiler->e, "wrong return type", (AstNode *)head, ret,
@@ -550,14 +544,9 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
         typecheck_expr(compiler, symt_local, (AstExpr *)AS_SINGLE(head)->node);
     }; break;
     case STMT_PRINT: {
-        AstSingle *stmt = AS_SINGLE(head);
-        if ((u32)stmt->node->type < (u32)EXPR_TYPE_LEN) {
-            typecheck_expr(compiler, symt_local, (AstExpr *)stmt->node);
-        } else {
-            AstList *args = (AstList *)stmt->node;
-            for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                typecheck_expr(compiler, symt_local, (AstExpr *)node->this);
-            }
+        AstList *stmt = AS_LIST(head);
+        for (AstListNode *node = stmt->head; node != NULL; node = node->next) {
+            typecheck_expr(compiler, symt_local, (AstExpr *)node->this);
         }
     }; break;
     case STMT_BLOCK: {
@@ -575,8 +564,8 @@ static void typecheck_stmt(Compiler *compiler, SymbolTable *symt_local, TypeInfo
                                    r);
         }
     } break;
-    case STMT_ABRUPT_BREAK:
-    case STMT_ABRUPT_CONTINUE:
+    case STMT_BREAK:
+    case STMT_CONTINUE:
         break;
     default:
         ASSERT_NOT_REACHED;
@@ -863,11 +852,11 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
         AstStruct *struct_decl = AS_STRUCT(node->this);
         struct_decl_to_type(compiler, struct_decl);
     }
-    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->funcs.head; node != NULL; node = node->next) {
         AstFunc *func_decl = AS_FUNC(node->this);
         func_decl_to_type(compiler, func_decl);
     }
-    for (AstListNode *node = root->declarations.head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->vars.head; node != NULL; node = node->next) {
         AstTypedVarList vars = AS_NODE_VAR_LIST(node->this)->vars;
         for (u32 i = 0; i < vars.len; i++) {
             AstTypedVar typed_var = vars.vars[i];
@@ -944,7 +933,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     }
 
     /* Bind symbols */
-    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->funcs.head; node != NULL; node = node->next) {
         bind_function(compiler, AS_FUNC(node->this));
     }
     if (compiler->e->n_errors != 0) {
@@ -952,7 +941,7 @@ void symbol_generate(Compiler *compiler, AstRoot *root)
     }
 
     /* Typecheck each function */
-    for (AstListNode *node = root->functions.head; node != NULL; node = node->next) {
+    for (AstListNode *node = root->funcs.head; node != NULL; node = node->next) {
         AstFunc *func = AS_FUNC(node->this);
         Symbol *func_sym = symt_find_sym(&compiler->symt_root, func->name);
         assert(func_sym != NULL && "Could not find symbol for function in bind_and_check!?!?");

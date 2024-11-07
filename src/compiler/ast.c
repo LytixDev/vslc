@@ -21,28 +21,25 @@
 #include <stdio.h>
 
 char *node_type_str_map[AST_NODE_TYPE_LEN] = {
-    "EXPR_UNARY",         "EXPR_BINARY",       "EXPR_LITERAL",
-    "EXPR_CALL",          "STMT_WHILE",        "STMT_IF",
-    "STMT_ABRUPT",        "STMT_ABRUPT_BREAK", "STMT_ABRUPT_CONTINUE",
-    "STMT_ABRUPT_RETURN", "STMT_PRINT",        "STMT_EXPR",
-    "STMT_BLOCK",         "STMT_ASSIGNMENT",   "AST_FUNC",
-    "AST_STRUCT",         "AST_ENUM",          "AST_LIST",
-    "AST_NODE_VAR_LIST",  "AST_ROOT",
+    "EXPR_UNARY", "EXPR_BINARY", "EXPR_LITERAL",      "EXPR_CALL",   "STMT_WHILE",
+    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",     "STMT_RETURN", "STMT_PRINT",
+    "STMT_EXPR",  "STMT_BLOCK",  "STMT_ASSIGNMENT",   "AST_FUNC",    "AST_STRUCT",
+    "AST_ENUM",   "AST_LIST",    "AST_NODE_VAR_LIST", "AST_ROOT",
 };
 
 /* Expressions */
-AstUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op)
+AstUnary *make_unary(Arena *a, AstExpr *expr, TokenType op)
 {
-    AstUnary *unary = m_arena_alloc(arena, sizeof(AstUnary));
+    AstUnary *unary = m_arena_alloc(a, sizeof(AstUnary));
     unary->type = EXPR_UNARY;
     unary->op = op;
     unary->expr = expr;
     return unary;
 }
 
-AstBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right)
+AstBinary *make_binary(Arena *a, AstExpr *left, TokenType op, AstExpr *right)
 {
-    AstBinary *binary = m_arena_alloc(arena, sizeof(AstBinary));
+    AstBinary *binary = m_arena_alloc(a, sizeof(AstBinary));
     binary->type = EXPR_BINARY;
     binary->op = op;
     binary->left = left;
@@ -50,9 +47,9 @@ AstBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right
     return binary;
 }
 
-AstLiteral *make_literal(Arena *arena, Token token)
+AstLiteral *make_literal(Arena *a, Token token)
 {
-    AstLiteral *literal = m_arena_alloc(arena, sizeof(AstLiteral));
+    AstLiteral *literal = m_arena_alloc(a, sizeof(AstLiteral));
     literal->type = EXPR_LITERAL;
     literal->literal = token.lexeme;
     if (token.type == TOKEN_NUM) {
@@ -65,9 +62,9 @@ AstLiteral *make_literal(Arena *arena, Token token)
     return literal;
 }
 
-AstCall *make_call(Arena *arena, Str8View identifier, AstNode *args)
+AstCall *make_call(Arena *a, Str8View identifier, AstList *args)
 {
-    AstCall *call = m_arena_alloc(arena, sizeof(AstCall));
+    AstCall *call = m_arena_alloc(a, sizeof(AstCall));
     call->type = EXPR_CALL;
     call->identifier = identifier;
     call->args = args;
@@ -75,18 +72,18 @@ AstCall *make_call(Arena *arena, Str8View identifier, AstNode *args)
 }
 
 /* Statements */
-AstWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body)
+AstWhile *make_while(Arena *a, AstExpr *condition, AstStmt *body)
 {
-    AstWhile *stmt = m_arena_alloc(arena, sizeof(AstWhile));
+    AstWhile *stmt = m_arena_alloc(a, sizeof(AstWhile));
     stmt->type = STMT_WHILE;
     stmt->condition = condition;
     stmt->body = body;
     return stmt;
 }
 
-AstIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_)
+AstIf *make_if(Arena *a, AstExpr *condition, AstStmt *then, AstStmt *else_)
 {
-    AstIf *stmt = m_arena_alloc(arena, sizeof(AstIf));
+    AstIf *stmt = m_arena_alloc(a, sizeof(AstIf));
     stmt->type = STMT_IF;
     stmt->condition = condition;
     stmt->then = then;
@@ -94,26 +91,26 @@ AstIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_)
     return stmt;
 }
 
-AstSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list)
+AstSingle *make_single(Arena *a, AstStmtType single_type, AstNode *node)
 {
-    AstSingle *stmt = m_arena_alloc(arena, sizeof(AstSingle));
+    AstSingle *stmt = m_arena_alloc(a, sizeof(AstSingle));
     stmt->type = single_type;
-    stmt->node = print_list;
+    stmt->node = node;
     return stmt;
 }
 
-AstBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *stmts)
+AstBlock *make_block(Arena *a, AstTypedVarList declarations, AstList *stmts)
 {
-    AstBlock *stmt = m_arena_alloc(arena, sizeof(AstBlock));
+    AstBlock *stmt = m_arena_alloc(a, sizeof(AstBlock));
     stmt->type = STMT_BLOCK;
     stmt->declarations = declarations;
     stmt->stmts = stmts;
     return stmt;
 }
 
-AstAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
+AstAssignment *make_assignment(Arena *a, AstExpr *left, AstExpr *right)
 {
-    AstAssignment *stmt = m_arena_alloc(arena, sizeof(AstAssignment));
+    AstAssignment *stmt = m_arena_alloc(a, sizeof(AstAssignment));
     stmt->type = STMT_ASSIGNMENT;
     stmt->left = left;
     stmt->right = right;
@@ -121,80 +118,84 @@ AstAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right)
 }
 
 /* Other nodes */
-AstFunc *make_function(Arena *arena, Str8View name, AstTypedVarList parameters, AstStmt *body,
-                       AstTypeInfo return_type)
+AstFunc *make_func(Arena *a, Str8View name, AstTypedVarList params, AstStmt *body,
+                   AstTypeInfo return_type)
 {
-    AstFunc *func = m_arena_alloc(arena, sizeof(AstFunc));
+    AstFunc *func = m_arena_alloc(a, sizeof(AstFunc));
     func->type = AST_FUNC;
     func->name = name;
-    func->parameters = parameters;
+    func->parameters = params;
     func->return_type = return_type;
     func->body = body;
     return func;
 }
 
-AstStruct *make_struct(Arena *arena, Str8View name, AstTypedVarList members)
+AstStruct *make_struct(Arena *a, Str8View name, AstTypedVarList members)
 {
-    AstStruct *struct_decl = m_arena_alloc(arena, sizeof(AstStruct));
+    AstStruct *struct_decl = m_arena_alloc(a, sizeof(AstStruct));
     struct_decl->type = AST_STRUCT;
     struct_decl->name = name;
     struct_decl->members = members;
     return struct_decl;
 }
 
-AstEnum *make_enum(Arena *arena, Str8View name, AstTypedVarList values)
+AstEnum *make_enum(Arena *a, Str8View name, AstTypedVarList values)
 {
-    AstEnum *enum_decl = m_arena_alloc(arena, sizeof(AstEnum));
+    AstEnum *enum_decl = m_arena_alloc(a, sizeof(AstEnum));
     enum_decl->type = AST_ENUM;
     enum_decl->name = name;
     enum_decl->members = values;
     return enum_decl;
 }
 
-AstListNode *make_list_node(Arena *arena, AstNode *this)
+AstListNode *make_list_node(Arena *a, AstNode *this)
 {
-    AstListNode *node = m_arena_alloc(arena, sizeof(AstListNode));
+    AstListNode *node = m_arena_alloc(a, sizeof(AstListNode));
     node->this = this;
     node->next = NULL;
     return node;
 }
 
-AstList *make_list(Arena *arena, AstNode *head)
+AstList *make_list(Arena *a, AstNode *head)
 {
-    AstList *list = m_arena_alloc(arena, sizeof(AstList));
+    AstList *list = m_arena_alloc(a, sizeof(AstList));
     list->type = AST_LIST;
-    list->head = make_list_node(arena, head);
+    list->head = make_list_node(a, head);
     list->tail = list->head;
     return list;
 }
 
 void ast_list_push_back(AstList *list, AstListNode *node)
 {
-    list->tail->next = node;
-    list->tail = node;
+    if (list->head == NULL) {
+        list->head = node;
+        list->tail = node;
+    } else {
+        list->tail->next = node;
+        list->tail = node;
+    }
 }
 
-AstNodeVarList *make_node_var_list(Arena *arena, AstTypedVarList vars)
+AstNodeVarList *make_node_var_list(Arena *a, AstTypedVarList vars)
 {
-    AstNodeVarList *node_var_list = m_arena_alloc(arena, sizeof(AstNodeVarList));
+    AstNodeVarList *node_var_list = m_arena_alloc(a, sizeof(AstNodeVarList));
     node_var_list->type = AST_NODE_VAR_LIST;
     node_var_list->vars = vars;
     return node_var_list;
 }
 
-AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
-                   AstList enums)
+AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums)
 {
-    AstRoot *root = m_arena_alloc(arena, sizeof(AstRoot));
+    AstRoot *root = m_arena_alloc(a, sizeof(AstRoot));
     root->type = AST_ROOT;
-    root->declarations = declarations;
-    root->functions = functions;
+    root->vars = vars;
+    root->funcs = funcs;
     root->structs = structs;
     root->enums = enums;
     return root;
 }
 
-
+/* AST Print */
 static void print_indent(u32 indent)
 {
     for (u32 i = 0; i < indent; i++) {
@@ -251,11 +252,11 @@ static void ast_print_expr(AstExpr *head, u32 indent)
         AstCall *call = AS_CALL(head);
         printf("%.*s", STR8VIEW_PRINT(call->identifier));
         if (call->args) {
-            ast_print(call->args, indent + 1);
+            ast_print((AstNode *)call->args, indent + 1);
         }
     } break;
     default:
-        printf("Ast type not handled ...\n");
+        ASSERT_NOT_REACHED;
     }
 }
 
@@ -280,9 +281,9 @@ void ast_print_stmt(AstStmt *head, u32 indent)
             ast_print_stmt(stmt->else_, indent + 1);
         }
     }; break;
-    case STMT_ABRUPT_BREAK:
-    case STMT_ABRUPT_CONTINUE:
-    case STMT_ABRUPT_RETURN:
+    case STMT_BREAK:
+    case STMT_CONTINUE:
+    case STMT_RETURN:
     case STMT_EXPR:
     case STMT_PRINT: {
         AstSingle *stmt = AS_SINGLE(head);
@@ -302,7 +303,7 @@ void ast_print_stmt(AstStmt *head, u32 indent)
         ast_print_expr(stmt->right, indent + 1);
     }; break;
     default:
-        printf("NOT HANDLED");
+        ASSERT_NOT_REACHED;
     }
 }
 
@@ -324,8 +325,8 @@ void ast_print(AstNode *head, u32 indent)
     switch (head->type) {
     case AST_ROOT: {
         AstRoot *root = AS_ROOT(head);
-        ast_print((AstNode *)(&root->declarations), indent + 1);
-        ast_print((AstNode *)(&root->functions), indent + 1);
+        ast_print((AstNode *)(&root->vars), indent + 1);
+        ast_print((AstNode *)(&root->funcs), indent + 1);
         ast_print((AstNode *)(&root->structs), indent + 1);
         ast_print((AstNode *)(&root->enums), indent + 1);
     }; break;
@@ -365,6 +366,6 @@ void ast_print(AstNode *head, u32 indent)
         ast_print_typed_var_list(node_var_list->vars);
     }; break;
     default:
-        printf("NOT HANDLED");
+        ASSERT_NOT_REACHED;
     }
 }

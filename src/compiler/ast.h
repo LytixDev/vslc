@@ -43,7 +43,6 @@ typedef struct {
 
 
 /* Enums */
-/* High-level AST: */
 typedef enum {
     LIT_STR,
     LIT_IDENT,
@@ -62,13 +61,12 @@ typedef enum {
     STMT_WHILE = EXPR_TYPE_LEN,
     STMT_IF,
 
-    STMT_ABRUPT,
-    STMT_ABRUPT_BREAK,
-    STMT_ABRUPT_CONTINUE,
-    STMT_ABRUPT_RETURN,
+    STMT_BREAK, // AstSingle
+    STMT_CONTINUE, // AstSingle
+    STMT_RETURN, // AstSingle
+    STMT_EXPR, // AstSingle. AstCall promoted to a statement.
 
-    STMT_PRINT,
-    STMT_EXPR,
+    STMT_PRINT, // AstList
     STMT_BLOCK,
     STMT_ASSIGNMENT,
     STMT_TYPE_LEN,
@@ -110,6 +108,8 @@ typedef struct {
     AstNodeType type;
 } AstNode;
 
+typedef struct ast_list_node AstListNode;
+typedef struct ast_list AstList;
 
 /* Expressions */
 typedef struct {
@@ -140,9 +140,8 @@ typedef struct {
     AstExprType type;
     TypeInfo *t; // @NULLABLE. Only set after typechecking.
     Str8 identifier;
-    AstNode *args; // @NULLABLE. List
+    AstList *args; // @NULLABLE.
 } AstCall;
-
 
 /* Statements */
 typedef struct {
@@ -157,18 +156,6 @@ typedef struct {
     AstStmt *then;
     AstStmt *else_;
 } AstIf;
-
-// TODO: Consider other structure than a linked-list
-typedef struct ast_list_node AstListNode;
-struct ast_list_node {
-    AstNode *this;
-    AstListNode *next;
-};
-typedef struct {
-    AstNodeType type;
-    AstListNode *head;
-    AstListNode *tail;
-} AstList;
 
 typedef struct {
     AstStmtType type; // Abrupt, print or Expr promoted to an Stmt
@@ -189,6 +176,18 @@ typedef struct {
 
 
 /* Nodes */
+// TODO: Consider other structure than a linked-list
+struct ast_list_node {
+    AstNode *this;
+    AstListNode *next;
+};
+
+struct ast_list {
+    AstNodeType type;
+    AstListNode *head;
+    AstListNode *tail;
+};
+
 typedef struct {
     AstNodeType type;
     AstTypedVarList vars;
@@ -216,8 +215,8 @@ typedef struct {
 
 typedef struct {
     AstNodeType type;
-    AstList declarations; // AstTypedVarList
-    AstList functions; // AstFunction
+    AstList vars; // AstTypedVarList
+    AstList funcs; // AstFunc
     AstList structs; // AstStruct
     AstList enums; // AstEnum
 } AstRoot;
@@ -230,7 +229,6 @@ typedef struct {
 
 #define AS_WHILE(___stmt) ((AstWhile *)(___stmt))
 #define AS_IF(___stmt) ((AstIf *)(___stmt))
-#define AS_ABRUPT(___stmt) ((AstAbrupt *)(___stmt))
 #define AS_SINGLE(___stmt) ((AstSingle *)(___stmt))
 #define AS_BLOCK(___stmt) ((AstBlock *)(___stmt))
 #define AS_ASSIGNMENT(___stmt) ((AstAssignment *)(___stmt))
@@ -244,30 +242,30 @@ typedef struct {
 
 extern char *node_type_str_map[AST_NODE_TYPE_LEN];
 
+
 /* Expresions */
-AstUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
-AstBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right);
-AstLiteral *make_literal(Arena *arena, Token token);
-AstCall *make_call(Arena *arena, Str8 identifier, AstNode *args);
+AstUnary *make_unary(Arena *a, AstExpr *expr, TokenType op);
+AstBinary *make_binary(Arena *a, AstExpr *left, TokenType op, AstExpr *right);
+AstLiteral *make_literal(Arena *a, Token token);
+AstCall *make_call(Arena *a, Str8View identifier, AstList *args);
 
 /* Statements */
-AstWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
-AstIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
-AstSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
-AstBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *statements);
-AstAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
+AstWhile *make_while(Arena *a, AstExpr *condition, AstStmt *body);
+AstIf *make_if(Arena *a, AstExpr *condition, AstStmt *then, AstStmt *else_);
+AstSingle *make_single(Arena *a, AstStmtType single_type, AstNode *node);
+AstBlock *make_block(Arena *a, AstTypedVarList declarations, AstList *statements);
+AstAssignment *make_assignment(Arena *a, AstExpr *left, AstExpr *right);
 
-/* */
-AstFunc *make_function(Arena *arena, Str8 name, AstTypedVarList parameters, AstStmt *body,
-                       AstTypeInfo return_type);
-AstStruct *make_struct(Arena *arena, Str8 name, AstTypedVarList members);
-AstEnum *make_enum(Arena *arena, Str8 name, AstTypedVarList values);
-AstListNode *make_list_node(Arena *arena, AstNode *this);
+/* Declarations and other nodes*/
+AstFunc *make_func(Arena *a, Str8 name, AstTypedVarList params, AstStmt *body,
+                   AstTypeInfo return_type);
+AstStruct *make_struct(Arena *a, Str8 name, AstTypedVarList members);
+AstEnum *make_enum(Arena *a, Str8 name, AstTypedVarList values);
+AstListNode *make_list_node(Arena *a, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
-AstList *make_list(Arena *arena, AstNode *head);
-AstNodeVarList *make_node_var_list(Arena *arena, AstTypedVarList vars);
-AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
-                   AstList enums);
+AstList *make_list(Arena *a, AstNode *head);
+AstNodeVarList *make_node_var_list(Arena *a, AstTypedVarList vars);
+AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums);
 
 void ast_print(AstNode *head, u32 indent);
 
