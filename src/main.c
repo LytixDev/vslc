@@ -54,10 +54,10 @@ u32 run(char *input)
         printf("%s\n", err->msg.str);
     }
 
-    // ast_print((AstNode *)ast_root, 0);
-    // putchar('\n');
+    ast_print((AstNode *)ast_root, 0);
+    putchar('\n');
 
-    transpile_to_c(&compiler);
+    // transpile_to_c(&compiler);
 
 done:
     error_handler_release(&e);

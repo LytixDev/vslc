@@ -26,6 +26,12 @@ typedef struct {
     Arena *arena; // Allocator for all dynamic allocations performed by the parser
     Arena *lex_arena;
     Lexer lexer;
+    /*
+     * When unlex is true we do not invoke the lexer in lex_next() and instead return
+     * the previously lexed token
+     */
+    bool unlex;
+    Token previous;
 } Parser;
 
 AstRoot *parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input);

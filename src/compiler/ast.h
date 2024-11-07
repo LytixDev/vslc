@@ -28,8 +28,7 @@ typedef struct {
     Str8 name;
     bool is_array;
     s32 elements;
-    bool is_pointer;
-    s32 pointer_indirection;
+    s32 pointer_indirection; // 0 means that this is not a pointer
 } AstTypeInfo;
 
 typedef struct {
@@ -93,9 +92,9 @@ typedef enum {
 } AstNodeKind;
 
 /*
- * Headers. As described above, the way we set up the neums  means we can always "upcast" AstExprs 
+ * Headers. As described above, the way we set up the neums  means we can always "upcast" AstExprs
  * and AstStmts to AstNodes.
- * NOTE: The actual node structs (AstExpr, AstStmt, AstNode) all start with their respective 
+ * NOTE: The actual node structs (AstExpr, AstStmt, AstNode) all start with their respective
  * type field, enabling safe pointer casting between them.
  */
 typedef struct expr_t {
@@ -118,7 +117,7 @@ typedef struct ast_list AstList;
 typedef struct {
     AstExprKind kind;
     TypeInfo *t; // @NULLABLE. Only set after typechecking.
-    TokenType op;
+    TokenKind op;
     AstExpr *expr;
 } AstUnary;
 
@@ -126,7 +125,7 @@ typedef struct {
     AstExprKind kind;
     TypeInfo *t; // @NULLABLE. Only set after typechecking.
     AstExpr *left;
-    TokenType op;
+    TokenKind op;
     AstExpr *right;
 } AstBinary;
 
@@ -172,7 +171,7 @@ typedef struct {
 
 typedef struct {
     AstStmtKind kind;
-    AstExpr *left; // Identifier literal or array indexing (BinaryExpr)
+    AstExpr *left; // Identifier literal, array indexing, dereference or struct member access
     AstExpr *right;
 } AstAssignment;
 
@@ -247,8 +246,8 @@ extern char *node_kind_str_map[AST_NODE_TYPE_LEN];
 
 
 /* Expresions */
-AstUnary *make_unary(Arena *a, AstExpr *expr, TokenType op);
-AstBinary *make_binary(Arena *a, AstExpr *left, TokenType op, AstExpr *right);
+AstUnary *make_unary(Arena *a, AstExpr *expr, TokenKind op);
+AstBinary *make_binary(Arena *a, AstExpr *left, TokenKind op, AstExpr *right);
 AstLiteral *make_literal(Arena *a, Token token);
 AstCall *make_call(Arena *a, Str8View identifier, AstList *args);
 

@@ -97,9 +97,9 @@ static void accept_run(Lexer *lexer, char *accept_list)
         ;
 }
 
-static Token emit(Lexer *lexer, TokenType type)
+static Token emit(Lexer *lexer, TokenKind type)
 {
-    Token token = { .type = type,
+    Token token = { .kind = type,
                     .start = lexer->start,
                     .end = lexer->current,
                     .lexeme = (Str8View){ .str = (u8 *)(lexer->input) + lexer->pos_start,
@@ -108,7 +108,7 @@ static Token emit(Lexer *lexer, TokenType type)
     return token;
 }
 
-static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenType type)
+static Token emit_str(Lexer *lexer, Str8Builder *sb, TokenKind type)
 {
     Token token = emit(lexer, type);
     Str8 final = str_builder_end(sb);
@@ -164,7 +164,7 @@ Token lex_next(Arena *arena, Lexer *lexer)
     char c = next(lexer);
     switch (c) {
     case EOF:
-        return (Token){ .type = TOKEN_EOF };
+        return (Token){ .kind = TOKEN_EOF };
 
     /* Whitespace */
     case ' ':
@@ -225,7 +225,7 @@ Token lex_next(Arena *arena, Lexer *lexer)
             return emit(lexer, TOKEN_NEQ);
         } else {
             error_lex(lexer->e, "Expected '=' afer '!'", lexer->start, lexer->current);
-            return (Token){ .type = TOKEN_ERR };
+            return (Token){ .kind = TOKEN_ERR };
         }
     };
 
@@ -235,7 +235,7 @@ Token lex_next(Arena *arena, Lexer *lexer)
         }
         if (!(is_alpha(c))) {
             error_lex(lexer->e, "Unrecognized character", lexer->start, lexer->current);
-            return (Token){ .type = TOKEN_ERR };
+            return (Token){ .kind = TOKEN_ERR };
         }
         /* Reserved words and identifiers */
         return lex_ident(arena, lexer);
@@ -299,7 +299,7 @@ static Token lex_str(Arena *arena, Lexer *lexer)
         if (c == EOF || c == '\n') {
             char *err_msg = "Recieved newline or EOF inside string literal";
             error_lex(lexer->e, err_msg, lexer->start, lexer->current);
-            return (Token){ .type = TOKEN_ERR };
+            return (Token){ .kind = TOKEN_ERR };
         }
         if (c == '\\') {
             c = next(lexer);
@@ -315,7 +315,7 @@ static Token lex_str(Arena *arena, Lexer *lexer)
 
     if (had_error) {
         reset_token_ctx(lexer);
-        return (Token){ .type = TOKEN_ERR };
+        return (Token){ .kind = TOKEN_ERR };
     }
     str_builder_append_u8(&sb, 0);
     return emit_str(lexer, &sb, TOKEN_STR);
@@ -348,5 +348,5 @@ char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
 
 void token_print(Token token)
 {
-    printf("%s\n", token_type_str_map[token.type]);
+    printf("%s\n", token_type_str_map[token.kind]);
 }

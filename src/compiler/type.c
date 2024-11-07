@@ -67,7 +67,6 @@ static void *make_type_info(Arena *arena, TypeInfoKind kind, Str8 generated_by_n
 static bool type_info_equal(TypeInfo *a, TypeInfo *b)
 {
     /* Name equivalence. Arrays also need same number of elements */
-    // NOTE: when we introduce double pointers this won't work
     if (a->kind != b->kind) {
         return false;
     }
@@ -75,6 +74,11 @@ static bool type_info_equal(TypeInfo *a, TypeInfo *b)
         TypeInfoArray *aa = (TypeInfoArray *)a;
         TypeInfoArray *bb = (TypeInfoArray *)b;
         return aa->elements == bb->elements && type_info_equal(aa->element_type, bb->element_type);
+    } else if (a->kind == TYPE_POINTER) {
+        TypeInfoPointer *aa = (TypeInfoPointer *)a;
+        TypeInfoPointer *bb = (TypeInfoPointer *)b;
+        return aa->level_of_indirection == bb->level_of_indirection &&
+               type_info_equal(aa->pointer_to, bb->pointer_to);
     } else {
         return STR8VIEW_EQUAL(a->generated_by_name, b->generated_by_name);
     }
@@ -205,10 +209,11 @@ static TypeInfo *ast_type_resolve(Compiler *compiler, AstTypeInfo ati, bool err_
     // TODO: Instead of creating new types when we see pointers and arrays, maybe we can check if
     //       they already exist and then reuse that?
     TypeInfo *type_info = sym->type_info;
-    if (ati.is_pointer) {
+    if (ati.pointer_indirection > 0) {
         TypeInfoPointer *t = make_type_info(compiler->persist_arena, TYPE_POINTER, sym->name);
         t->pointer_to = type_info;
         t->info.is_resolved = true;
+        t->level_of_indirection = ati.pointer_indirection;
         type_info = (TypeInfo *)t;
     }
     if (ati.is_array) {
@@ -478,14 +483,16 @@ static TypeInfo *typecheck_expr(Compiler *compiler, SymbolTable *symt_local, Ast
         AstCall *call = AS_CALL(head);
         Symbol *sym = symt_find_sym(symt_local, call->identifier);
         TypeInfoFunc *callee = (TypeInfoFunc *)sym->type_info;
+        if (call->args == NULL && callee->n_params == 0) {
+            head->t = callee->return_type;
+            return head->t;
+        }
         /* Check that enough args were supplied */
         if (call->args == NULL && callee->n_params != 0) {
             error_node(compiler->e, "Expected n args, but got 0", (AstNode *)call);
             head->t = callee->return_type;
             return head->t;
         }
-        /* If args is a single expression */
-        // TODO: parser should wrap single expression in a list
 
         /* If args is a list */
         AstList *args = (AstList *)call->args;

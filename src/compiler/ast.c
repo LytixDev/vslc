@@ -21,14 +21,14 @@
 #include <stdio.h>
 
 char *node_kind_str_map[AST_NODE_TYPE_LEN] = {
-    "EXPR_UNARY", "EXPR_BINARY", "EXPR_LITERAL",      "EXPR_CALL",   "STMT_WHILE",
-    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",     "STMT_RETURN", "STMT_PRINT",
-    "STMT_EXPR",  "STMT_BLOCK",  "STMT_ASSIGNMENT",   "AST_FUNC",    "AST_STRUCT",
+    "EXPR_UNARY", "EXPR_BINARY", "EXPR_LITERAL",         "EXPR_CALL",   "STMT_WHILE",
+    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",        "STMT_RETURN", "STMT_PRINT",
+    "STMT_EXPR",  "STMT_BLOCK",  "STMT_ASSIGNMENT",      "AST_FUNC",    "AST_STRUCT",
     "AST_ENUM",   "AST_LIST",    "AST_TYPED_IDENT_LIST", "AST_ROOT",
 };
 
 /* Expressions */
-AstUnary *make_unary(Arena *a, AstExpr *expr, TokenType op)
+AstUnary *make_unary(Arena *a, AstExpr *expr, TokenKind op)
 {
     AstUnary *unary = m_arena_alloc(a, sizeof(AstUnary));
     unary->kind = EXPR_UNARY;
@@ -37,7 +37,7 @@ AstUnary *make_unary(Arena *a, AstExpr *expr, TokenType op)
     return unary;
 }
 
-AstBinary *make_binary(Arena *a, AstExpr *left, TokenType op, AstExpr *right)
+AstBinary *make_binary(Arena *a, AstExpr *left, TokenKind op, AstExpr *right)
 {
     AstBinary *binary = m_arena_alloc(a, sizeof(AstBinary));
     binary->kind = EXPR_BINARY;
@@ -52,9 +52,9 @@ AstLiteral *make_literal(Arena *a, Token token)
     AstLiteral *literal = m_arena_alloc(a, sizeof(AstLiteral));
     literal->kind = EXPR_LITERAL;
     literal->literal = token.lexeme;
-    if (token.type == TOKEN_NUM) {
+    if (token.kind == TOKEN_NUM) {
         literal->lit_type = LIT_NUM;
-    } else if (token.type == TOKEN_STR) {
+    } else if (token.kind == TOKEN_STR) {
         literal->lit_type = LIT_STR;
     } else {
         literal->lit_type = LIT_IDENT;
@@ -207,11 +207,13 @@ static void ast_print_typed_var_list(TypedIdentList vars)
 {
     for (u32 i = 0; i < vars.len; i++) {
         TypedIdent var = vars.vars[i];
+        printf("%.*s: ", STR8VIEW_PRINT(var.name));
+        for (s32 j = 0; j < var.ast_type_info.pointer_indirection; j++) {
+            printf("^");
+        }
+        printf("%.*s", STR8VIEW_PRINT(var.ast_type_info.name));
         if (var.ast_type_info.is_array) {
-            printf("%.*s: %.*s[%d]", STR8VIEW_PRINT(var.name),
-                   STR8VIEW_PRINT(var.ast_type_info.name), var.ast_type_info.elements);
-        } else {
-            printf("%.*s: %.*s", STR8VIEW_PRINT(var.name), STR8VIEW_PRINT(var.ast_type_info.name));
+            printf("[%d]", var.ast_type_info.elements);
         }
         if (i != vars.len - 1) {
             printf(", ");

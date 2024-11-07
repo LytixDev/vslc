@@ -23,7 +23,7 @@
 #include "lex.h"
 #include "parser.h"
 
-TokenType token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
+TokenKind token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_ERR,
     0, // TOKEN_NUM,
     0, // TOKEN_STR,
@@ -70,10 +70,14 @@ static AstList *parse_expr_list(Parser *parser);
 static AstStmt *parse_stmt(Parser *parser);
 static TypedIdentList parse_local_decl_list(Parser *parser);
 
-/* Wrapper so we can print the token in debug mode */
 static Token next_token(Parser *parser)
 {
+    if (parser->unlex) {
+        parser->unlex = false;
+        return parser->previous;
+    }
     Token token = lex_next(parser->lex_arena, &parser->lexer);
+    parser->previous = token;
     /*
      * NOTE on error handling:
      * There is no proper strategy in the parser for error recovery. Once we detect a error lex
@@ -81,7 +85,7 @@ static Token next_token(Parser *parser)
      * parse error, we optimistically continue parsing the whole source. This leads to many false
      * positives. Down the line, it would be nice to have a proper error recovery strategy.
      */
-    if (token.type == TOKEN_ERR) {
+    if (token.kind == TOKEN_ERR) {
         printf("%s\n ... Exiting ...\n", parser->lexer.e->tail->msg.str);
         exit(1);
     }
@@ -101,9 +105,9 @@ static Token peek_token(Parser *parser)
     return token;
 }
 
-static bool match_token(Parser *parser, TokenType type)
+static bool match_token(Parser *parser, TokenKind kind)
 {
-    if (peek_token(parser).type == type) {
+    if (peek_token(parser).kind == kind) {
         next_token(parser);
         return true;
     }
@@ -112,7 +116,7 @@ static bool match_token(Parser *parser, TokenType type)
 
 static bool is_bin_op(Token token)
 {
-    switch (token.type) {
+    switch (token.kind) {
     case TOKEN_PLUS:
     case TOKEN_MINUS:
     case TOKEN_STAR:
@@ -128,7 +132,7 @@ static bool is_bin_op(Token token)
 
 static bool is_relation_op(Token token)
 {
-    switch (token.type) {
+    switch (token.kind) {
     case TOKEN_EQ:
     case TOKEN_NEQ:
     case TOKEN_LESS:
@@ -139,12 +143,12 @@ static bool is_relation_op(Token token)
     }
 }
 
-static Token consume_or_err(Parser *parser, TokenType expected, char *msg)
+static Token consume_or_err(Parser *parser, TokenKind expected, char *msg)
 {
     Token token = peek_token(parser);
-    if (token.type != expected) {
+    if (token.kind != expected) {
         error_parse(parser->lexer.e, msg, token);
-        return (Token){ .type = TOKEN_ERR };
+        return (Token){ .kind = TOKEN_ERR };
     }
     next_token(parser);
     return token;
@@ -153,19 +157,27 @@ static Token consume_or_err(Parser *parser, TokenType expected, char *msg)
 static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
 {
     consume_or_err(parser, TOKEN_COLON, "Expected ':' after declaration to denote type");
-    bool is_pointer = match_token(parser, TOKEN_CARET);
+
+    u32 pointer_indirection = 0;
+    while (match_token(parser, TOKEN_CARET))
+        pointer_indirection++;
+
     Token name = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected typename after ':'");
     if (!match_token(parser, TOKEN_LBRACKET)) {
-        return (AstTypeInfo){ .name = name.lexeme, .is_pointer = is_pointer, .is_array = false };
+        return (AstTypeInfo){ .name = name.lexeme,
+                              .is_array = false,
+                              .pointer_indirection = pointer_indirection };
     }
     if (!allow_array_types) {
-        consume_or_err(parser, TOKEN_RBRACKET, "Global arrays are not allowed");
-        return (AstTypeInfo){ .name = name.lexeme, .is_pointer = is_pointer, .is_array = false };
+        consume_or_err(parser, TOKEN_RBRACKET, "Local arrays are not allowed");
+        return (AstTypeInfo){ .name = name.lexeme,
+                              .is_array = false,
+                              .pointer_indirection = pointer_indirection };
     }
 
     s32 elements = -1;
     Token peek = peek_token(parser);
-    if (peek.type == TOKEN_NUM) {
+    if (peek.kind == TOKEN_NUM) {
         next_token(parser);
         bool parsed_success;
         elements = str_view_to_u32(peek.lexeme, &parsed_success);
@@ -174,9 +186,10 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
         }
     }
     consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate the array type");
-    return (AstTypeInfo){
-        .name = name.lexeme, .is_pointer = is_pointer, .is_array = true, .elements = elements
-    };
+    return (AstTypeInfo){ .name = name.lexeme,
+                          .is_array = true,
+                          .elements = elements,
+                          .pointer_indirection = pointer_indirection };
 }
 
 static AstCall *parse_call(Parser *parser, Token identifier)
@@ -194,37 +207,43 @@ static AstCall *parse_call(Parser *parser, Token identifier)
 static AstExpr *parse_primary(Parser *parser)
 {
     Token token = next_token(parser);
-    switch (token.type) {
+    switch (token.kind) {
     case TOKEN_LPAREN: {
         AstExpr *expr = parse_expr(parser, 0);
-        Token err =
-            consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate the group expression");
-        if (err.type == TOKEN_ERR) {
-            // TODO: gracefully continue
-            fprintf(stderr, "err");
-        }
+        consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate the group expression");
         return expr;
     }
+
     /* Unary */
     case TOKEN_STAR:
-    case TOKEN_AMPERSAND:
+    case TOKEN_AMPERSAND: {
+        /*
+         * We later typecheck dereference (*) and address-of (&) to ensure RHS is correct,
+         * but already in the parse stage we can reject the RHS if it is not an expression
+         * starting with an identifier.
+         */
+        Token next = peek_token(parser);
+        if (next.kind != TOKEN_IDENTIFIER) {
+            error_parse(parser->lexer.e, "RHS of unary * or & must start with an identifier", next);
+        }
+        /* Intentional fallthrough */
+    }
     case TOKEN_MINUS: {
-        // TODO: RHS of address-of and dereference shouldn't be any expr
         AstExpr *expr = parse_expr(parser, 0);
-        return (AstExpr *)make_unary(parser->arena, expr, token.type);
+        return (AstExpr *)make_unary(parser->arena, expr, token.kind);
     }
     case TOKEN_NUM:
     case TOKEN_IDENTIFIER: {
         Token next = peek_token(parser);
-        if (next.type == TOKEN_LPAREN) {
+        if (next.kind == TOKEN_LPAREN) {
             return (AstExpr *)parse_call(parser, token);
-        } else if (next.type == TOKEN_LBRACKET) {
+        } else if (next.kind == TOKEN_LBRACKET) {
             /* Parse array indexing as a binary op */
             next_token(parser);
             AstExpr *left = (AstExpr *)make_literal(parser->arena, token);
             AstExpr *right = parse_expr(parser, 0);
             consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate array indexing");
-            return (AstExpr *)make_binary(parser->arena, left, next.type, right);
+            return (AstExpr *)make_binary(parser->arena, left, next.kind, right);
         } else {
             /* Parse single identifier */
             return (AstExpr *)make_literal(parser->arena, token);
@@ -255,20 +274,20 @@ static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 p
     if (!is_bin_op(next))
         return left;
 
-    u32 next_precedence = token_precedences[next.type];
+    u32 next_precedence = token_precedences[next.kind];
     if (precedence >= next_precedence)
         return left;
 
     next_token(parser);
     AstExpr *right;
     /* Struct member access is special because RHS must be an identifier */
-    if (next.type == TOKEN_DOT) {
+    if (next.kind == TOKEN_DOT) {
         Token ident = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected a struct member name");
         right = (AstExpr *)make_literal(parser->arena, ident);
     } else {
         right = parse_expr(parser, next_precedence);
     }
-    return (AstExpr *)make_binary(parser->arena, left, next.type, right);
+    return (AstExpr *)make_binary(parser->arena, left, next.kind, right);
 }
 
 static AstExpr *parse_expr(Parser *parser, u32 precedence)
@@ -296,14 +315,14 @@ static AstBinary *parse_relation(Parser *parser)
         next_token(parser);
     }
     AstExpr *right = parse_expr(parser, 0);
-    return make_binary(parser->arena, left, op.type, right);
+    return make_binary(parser->arena, left, op.kind, right);
 }
 
 static AstList *parse_expr_list(Parser *parser)
 {
     /* Parsers a comma seperated list of expressions */
     AstExpr *expr;
-    if (peek_token(parser).type == TOKEN_STR) {
+    if (peek_token(parser).kind == TOKEN_STR) {
         expr = (AstExpr *)make_literal(parser->arena, next_token(parser));
     } else {
         expr = parse_expr(parser, 0);
@@ -311,21 +330,21 @@ static AstList *parse_expr_list(Parser *parser)
 
     AstList *list = make_list(parser->arena, (AstNode *)expr);
 
-    if (peek_token(parser).type != TOKEN_COMMA) {
+    if (peek_token(parser).kind != TOKEN_COMMA) {
         return list;
     }
 
     AstListNode *list_node;
     do {
         next_token(parser);
-        if (peek_token(parser).type == TOKEN_STR) {
+        if (peek_token(parser).kind == TOKEN_STR) {
             expr = (AstExpr *)make_literal(parser->arena, next_token(parser));
         } else {
             expr = parse_expr(parser, 0);
         }
         list_node = make_list_node(parser->arena, (AstNode *)expr);
         ast_list_push_back(list, list_node);
-    } while (peek_token(parser).type == TOKEN_COMMA);
+    } while (peek_token(parser).kind == TOKEN_COMMA);
 
     return list;
 }
@@ -366,8 +385,8 @@ static AstBlock *parse_block(Parser *parser)
     AstList *stmts = make_list(parser->arena, (AstNode *)first);
 
     Token next;
-    while ((next = peek_token(parser)).type != TOKEN_END) {
-        if (next.type == TOKEN_EOF) {
+    while ((next = peek_token(parser)).kind != TOKEN_END) {
+        if (next.kind == TOKEN_EOF) {
             error_parse(parser->lexer.e, "Found EOF inside a block. Expected END", next);
             break;
         }
@@ -377,16 +396,29 @@ static AstBlock *parse_block(Parser *parser)
     }
 
     /* Consume the END token */
-    if (next.type != TOKEN_EOF) {
+    if (next.kind != TOKEN_EOF) {
         next_token(parser);
     }
     return make_block(parser->arena, declarations, stmts);
 }
 
+static AstAssignment *parse_assignment(Parser *parser, AstExpr *left)
+{
+    /* Already parsed the LHS, now we excpect the assignment operator ':=' */
+    Token token = next_token(parser);
+    if (token.kind != TOKEN_ASSIGNMENT) {
+        error_parse(parser->lexer.e, "Expected assignment after expression", token);
+        return NULL;
+    }
+
+    AstExpr *right = parse_expr(parser, 0);
+    return make_assignment(parser->arena, left, right);
+}
+
 static AstStmt *parse_stmt(Parser *parser)
 {
     Token token = next_token(parser);
-    switch (token.type) {
+    switch (token.kind) {
     case TOKEN_WHILE:
         return (AstStmt *)parse_while(parser);
     case TOKEN_IF:
@@ -395,7 +427,6 @@ static AstStmt *parse_stmt(Parser *parser)
         AstList *print_list = parse_expr_list(parser);
         print_list->kind = (AstNodeKind)STMT_PRINT;
         return (AstStmt *)print_list;
-        // return (AstStmt *)make_single(parser->arena, STMT_PRINT, print_list);
     }
     case TOKEN_RETURN: {
         AstExpr *expr = parse_expr(parser, 0);
@@ -403,31 +434,12 @@ static AstStmt *parse_stmt(Parser *parser)
     }
     case TOKEN_IDENTIFIER: {
         Token next = peek_token(parser);
-        if (next.type == TOKEN_LPAREN) {
+        if (next.kind == TOKEN_LPAREN) {
             /* Function call, promoted to a statement */
             AstNode *call = (AstNode *)parse_call(parser, token);
             return (AstStmt *)make_single(parser->arena, STMT_EXPR, call);
         }
-        next_token(parser);
-        AstExpr *left = (AstExpr *)make_literal(parser->arena, token);
-
-        if (next.type == TOKEN_DOT) {
-            left = (AstExpr *)parse_member_access(parser, left);
-            next = next_token(parser);
-        } else if (next.type == TOKEN_LBRACKET) {
-            /* Assignment, left-hand side is an array indexing */
-            AstExpr *right = parse_expr(parser, 0);
-            consume_or_err(parser, TOKEN_RBRACKET, "Expected ']' to terminate array indexing");
-            left = (AstExpr *)make_binary(parser->arena, left, next.type, right);
-            next = next_token(parser);
-        }
-        if (next.type != TOKEN_ASSIGNMENT) {
-            error_parse(parser->lexer.e, "Expected assignment", next);
-            return NULL;
-        }
-
-        AstExpr *right = parse_expr(parser, 0);
-        return (AstStmt *)make_assignment(parser->arena, left, right);
+        break; /* Can still be the LHS of an assignment */
     }
     case TOKEN_BREAK:
         return (AstStmt *)make_single(parser->arena, STMT_BREAK, NULL);
@@ -436,15 +448,38 @@ static AstStmt *parse_stmt(Parser *parser)
     case TOKEN_BEGIN:
         return (AstStmt *)parse_block(parser);
     default:
+        break;
+    }
+
+    /*
+     * The only valid production at this point is an assignment.
+     * An assignment must start with an identifier (literal, array indexing, member access) or
+     * a star for dereference. If we want to parse these expressions for the LHS of the assignment,
+     * we can call parse_expr(). However, parse_expr() expects to parse the from the start of the
+     * expression, meaning we must unlex the identifier/star we consumed.
+     */
+    AstExpr *left;
+    if (token.kind == TOKEN_IDENTIFIER) {
+        left = (AstExpr *)make_literal(parser->arena, token);
+        Token next = peek_token(parser);
+        if (next.kind == TOKEN_DOT || next.kind == TOKEN_LBRACKET) {
+            parser->unlex = true;
+            left = parse_expr(parser, 0);
+        }
+    } else if (token.kind == TOKEN_STAR) {
+        parser->unlex = true;
+        left = parse_expr(parser, 0);
+    } else {
         error_parse(parser->lexer.e, "Illegal first token in statement", token);
         return NULL;
     }
+    return (AstStmt *)parse_assignment(parser, left);
 }
 
 static TypedIdentList parse_variable_list(Parser *parser, bool allow_array_types, bool typed)
 {
     TypedIdentList typed_vars = { .vars = m_arena_alloc_struct(parser->arena, TypedIdent),
-                                   .len = 0 };
+                                  .len = 0 };
 
     TypedIdent *indices_head = typed_vars.vars;
     do {
@@ -465,7 +500,7 @@ static TypedIdentList parse_variable_list(Parser *parser, bool allow_array_types
         /* Alloc space for next TypedVar, store current, update len and head */
         *indices_head = new;
         typed_vars.len++;
-    } while (peek_token(parser).type == TOKEN_COMMA);
+    } while (peek_token(parser).kind == TOKEN_COMMA);
 
     return typed_vars;
 }
@@ -492,7 +527,7 @@ static AstFunc *parse_func(Parser *parser)
 
     consume_or_err(parser, TOKEN_LPAREN, "Expected '(' to start function parameter list");
     TypedIdentList vars = { 0 };
-    if (peek_token(parser).type != TOKEN_RPAREN) {
+    if (peek_token(parser).kind != TOKEN_RPAREN) {
         vars = parse_variable_list(parser, true, true);
     }
     consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate function parameter list");
@@ -511,8 +546,8 @@ static AstRoot *parse_root(Parser *parser)
     AstList enums = { .kind = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
-    while ((next = next_token(parser)).type != TOKEN_EOF) {
-        switch (next.type) {
+    while ((next = next_token(parser)).kind != TOKEN_EOF) {
+        switch (next.kind) {
         case TOKEN_VAR: {
             /* Parse global declarations list */
             TypedIdentList v = parse_variable_list(parser, true, true);
@@ -556,6 +591,7 @@ AstRoot *parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)
     Parser parser = {
         .arena = arena,
         .lex_arena = lex_arena,
+        .unlex = false,
     };
     lex_init(&parser.lexer, e, input);
 

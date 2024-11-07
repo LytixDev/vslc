@@ -60,12 +60,16 @@ static void write_newline_and_indent(u32 indent)
 static Str8 type_info_to_c_type_name(Compiler *compiler, TypeInfo *t)
 {
     Str8Builder sb = make_str_builder(compiler->persist_arena); // TODO: use pass arena
-    bool is_ptr = t->kind == TYPE_POINTER ? true : false;
+
+    s32 pointer_indirection = 0;
+    if (t->kind == TYPE_POINTER) {
+        pointer_indirection = ((TypeInfoPointer *)t)->level_of_indirection;
+    }
     u32 arr_elements = 0;
     if (t->kind == TYPE_ARRAY) {
         TypeInfoArray *type_as_array = (TypeInfoArray *)t;
         if (type_as_array->element_type->kind == TYPE_POINTER) {
-            is_ptr = true;
+            pointer_indirection = ((TypeInfoPointer *)type_as_array)->level_of_indirection;
         }
         arr_elements = type_as_array->elements;
     }
@@ -73,12 +77,15 @@ static Str8 type_info_to_c_type_name(Compiler *compiler, TypeInfo *t)
     if (t->kind == TYPE_ENUM) {
         str_builder_append_cstr(&sb, "enum ", 5);
     }
-    if (is_ptr) {
-        str_builder_append_u8(&sb, '*');
-    }
     str_builder_append_cstr(&sb, (char *)t->generated_by_name.str, t->generated_by_name.len);
     if (t->kind == TYPE_ARRAY) {
         str_builder_sprintf(&sb, "[%d]", 1, arr_elements);
+    }
+    if (pointer_indirection > 0) {
+        str_builder_append_u8(&sb, ' ');
+        for (s32 i = 0; i < pointer_indirection; i++) {
+            str_builder_append_u8(&sb, '*');
+        }
     }
     return str_builder_end(&sb);
 }

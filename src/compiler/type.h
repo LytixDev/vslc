@@ -90,6 +90,7 @@ typedef struct {
 typedef struct {
     TypeInfo info;
     TypeInfo *pointer_to;
+    s32 level_of_indirection;
 } TypeInfoPointer;
 
 
