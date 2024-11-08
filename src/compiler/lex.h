@@ -81,29 +81,28 @@ typedef enum {
     TOKEN_WHILE,
     TOKEN_DO,
     TOKEN_VAR,
+    TOKEN_NULL,
 
     TOKEN_TYPE_ENUM_COUNT,
-} TokenType;
+} TokenKind;
 
 typedef struct {
-    TokenType type;
+    TokenKind kind;
     Point start;
     Point end;
     Str8View lexeme; // For identifiers and strings, these are actually arena allocated Str8's
 } Token;
 
 typedef struct lexer_t {
+    ErrorHandler *e;
     char *input; // The input string being scanned.
     u32 pos_start;
     u32 pos_current;
     Point start; // Start point of the current token being processed
     Point current; // Current point in the input
-    // TODO: If we want to store more than one next token we could use a ring buffer
+    // NOTE: If we want to store more than one next token we could use a ring buffer
     bool has_next;
     Token next;
-
-    // Str8List str_list; // List of static strings
-    ErrorHandler *e;
 } Lexer;
 
 

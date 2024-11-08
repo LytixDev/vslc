@@ -33,15 +33,15 @@ typedef enum {
     TYPE_INFO_KIND_LEN
 } TypeInfoKind;
 
-typedef struct {
+typedef struct type_info_t {
     TypeInfoKind kind;
     bool is_resolved;
-    Str8 generated_by_name; // Not used by TYPE_ARRAY
+    Str8 generated_by; // Name of the symbol that generated this type. Not used by TYPE_ARRAY
 } TypeInfo;
 
 typedef struct {
     TypeInfo info;
-    u32 size;
+    u32 bit_size;
     bool is_signed;
 } TypeInfoInteger;
 
@@ -56,7 +56,7 @@ typedef struct {
     u32 offset;
     union {
         TypeInfo *type;
-        AstTypeInfo ati;
+        AstTypeInfo ast_type_info; // Used for resolution of the type
     };
 } TypeInfoStructMember;
 
@@ -89,7 +89,8 @@ typedef struct {
 
 typedef struct {
     TypeInfo info;
-    TypeInfo *pointer_to;
+    TypeInfo *pointer_to; // @NULLABLE for the null pointer
+    s32 level_of_indirection;
 } TypeInfoPointer;
 
 
@@ -102,7 +103,8 @@ typedef enum {
     SYMBOL_GLOBAL_VAR,
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
-    SYMBOL_MEMBER,
+    SYMBOL_ENUM_MEMBER, // Note: what about struct members?
+    SYMBOL_NULL_PTR, // null
 
     SYMBOL_TYPE_LEN,
 } SymbolKind;
@@ -115,13 +117,6 @@ struct symbol_table_t {
     Symbol **symbols;
     u32 sym_len;
     u32 sym_cap;
-
-    TypeInfo **types;
-    u32 type_len;
-    u32 type_cap;
-
-    u32 struct_count;
-
     HashMap map; // Key: string (u8 *), Value: *Symbol
     SymbolTable *parent; // @NULLABLE
 };
@@ -136,6 +131,9 @@ struct symbol_t {
 };
 
 
-void symbol_generate(Compiler *compiler, AstRoot *root);
+Symbol *symt_find_sym(SymbolTable *symt, Str8 key);
+void typegen(Compiler *c, AstRoot *root);
+void infer(Compiler *c, AstRoot *root);
+void typecheck(Compiler *compiler, AstRoot *root);
 
 #endif /* TYPE_H */

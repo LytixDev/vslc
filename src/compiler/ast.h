@@ -21,32 +21,42 @@
 #include "lex.h"
 
 typedef struct symbol_t Symbol; // forward from type.h
+typedef struct symbol_table_t SymbolTable; // forward from type.h
+typedef struct type_info_t TypeInfo; // forward from type.h
 
 
 typedef struct {
     Str8 name;
-    bool is_pointer;
     bool is_array;
-    s32 elements; // a -1 value means the array is dynamic
+    s32 elements;
+    s32 pointer_indirection; // 0 means that this is not a pointer
 } AstTypeInfo;
 
 typedef struct {
     Str8 name;
     AstTypeInfo ast_type_info;
-} AstTypedVar;
+} TypedIdent;
 
 typedef struct {
-    AstTypedVar *vars; // contiguous array
+    TypedIdent *vars; // contiguous array
     u32 len;
-} AstTypedVarList;
+} TypedIdentList;
 
 
-/* Enums */
-/* High-level AST: */
+/*
+ * Enums for the three categories of AST nodes: Expressions, Statements and Nodes.
+ * The enum values are set up in a way that enables us to treat all categories
+ * as part of a single continuous range, allowing for casting between node types.
+ *
+ * This setup allows us to:
+ * 1. Determine a node's category by comparing its type value against the _LEN constants
+ * 2. Use switch statements that handle all possible node types in a category
+ */
 typedef enum {
     LIT_STR,
     LIT_IDENT,
     LIT_NUM,
+    LIT_NULL,
 } LiteralType;
 
 typedef enum {
@@ -55,213 +65,213 @@ typedef enum {
     EXPR_LITERAL,
     EXPR_CALL,
     EXPR_TYPE_LEN,
-} AstExprType;
+} AstExprKind;
 
 typedef enum {
     STMT_WHILE = EXPR_TYPE_LEN,
     STMT_IF,
 
-    STMT_ABRUPT,
-    STMT_ABRUPT_BREAK,
-    STMT_ABRUPT_CONTINUE,
-    STMT_ABRUPT_RETURN,
+    STMT_BREAK, // AstSingle
+    STMT_CONTINUE, // AstSingle
+    STMT_RETURN, // AstSingle
+    STMT_EXPR, // AstSingle. AstCall promoted to a statement.
 
-    STMT_PRINT,
-    STMT_EXPR,
+    STMT_PRINT, // AstList
     STMT_BLOCK,
     STMT_ASSIGNMENT,
     STMT_TYPE_LEN,
-} AstStmtType;
+} AstStmtKind;
 
 typedef enum {
-    /*
-     * The way we set up the enum values means we always have space here for the EXPR and STMT vals.
-     */
     AST_FUNC = STMT_TYPE_LEN,
     AST_STRUCT,
     AST_ENUM,
     AST_LIST,
-    AST_NODE_VAR_LIST,
+    AST_TYPED_IDENT_LIST,
     AST_ROOT,
 
     AST_NODE_TYPE_LEN,
-} AstNodeType;
-
-/* Low-level AST: */
-typedef enum {
-    AST_LL_TYPE_LEN,
-} AstLLType;
+} AstNodeKind;
 
 /*
- * Headers
- * The way everything is set up means we can always upcast AstExpr's and AstStmt's to AstNode's.
+ * Headers. As described above, the way we set up the neums  means we can always "upcast" AstExprs
+ * and AstStmts to AstNodes.
+ * NOTE: The actual node structs (AstExpr, AstStmt, AstNode) all start with their respective
+ * type field, enabling safe pointer casting between them.
  */
 typedef struct expr_t {
-    AstExprType type;
+    AstExprKind kind;
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
 } AstExpr;
 
 typedef struct stmt_t {
-    AstStmtType type;
+    AstStmtKind kind;
 } AstStmt;
 
 typedef struct {
-    AstNodeType type;
+    AstNodeKind kind;
 } AstNode;
 
+typedef struct ast_list_node AstListNode;
+typedef struct ast_list AstList;
 
 /* Expressions */
 typedef struct {
-    AstExprType type;
-    TokenType op;
+    AstExprKind kind;
+    TypeInfo *t; // @NULLABLE. Only set after typechecking.
+    TokenKind op;
     AstExpr *expr;
-} AstExprUnary;
+} AstUnary;
 
 typedef struct {
-    AstExprType type;
+    AstExprKind kind;
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
     AstExpr *left;
-    TokenType op;
+    TokenKind op;
     AstExpr *right;
-} AstExprBinary;
+} AstBinary;
 
 typedef struct {
-    AstExprType type;
+    AstExprKind kind;
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
+    Symbol *sym; // @NULLABLE. After type checking, each TOKEN_IDENT is bound to a symbol
     LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
     Str8View literal; // Guranteed to be zero-terminated for STR and IDENT aka Str8
-    // TODO: Unsure if this is how we want it going forward.
-    Symbol *sym; // @NULLABLE. After type checking, each identifier is bound to a symbol
-} AstExprLiteral;
+} AstLiteral;
 
 typedef struct {
-    AstExprType type;
+    AstExprKind kind;
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
     Str8 identifier;
-    AstNode *args; // @NULLABLE. List
-} AstExprCall;
-
+    AstList *args; // @NULLABLE.
+} AstCall;
 
 /* Statements */
 typedef struct {
-    AstStmtType type;
+    AstStmtKind kind;
     AstExpr *condition;
     AstStmt *body;
-} AstStmtWhile;
+} AstWhile;
 
 typedef struct {
-    AstStmtType type;
+    AstStmtKind kind;
     AstExpr *condition;
     AstStmt *then;
     AstStmt *else_;
-} AstStmtIf;
+} AstIf;
 
-// TODO: Consider other structure than a linked-list
-typedef struct ast_list_node AstListNode;
+typedef struct {
+    AstStmtKind kind;
+    AstNode *node; // @NULLABLE
+} AstSingle;
+
+typedef struct {
+    AstStmtKind kind;
+    TypedIdentList declarations;
+    AstList *stmts;
+    // NOTE: Is this where this should be?
+    SymbolTable *symt_local; // @NULLABLE. Set after bind_stmt(), just before typecheck
+} AstBlock;
+
+typedef struct {
+    AstStmtKind kind;
+    AstExpr *left; // Identifier literal, array indexing, dereference or struct member access
+    AstExpr *right;
+} AstAssignment;
+
+
+/* Nodes */
+// NOTE: Consider other structure than a linked-list?
 struct ast_list_node {
     AstNode *this;
     AstListNode *next;
 };
-typedef struct {
-    AstNodeType type;
+
+struct ast_list {
+    AstNodeKind kind;
     AstListNode *head;
     AstListNode *tail;
-} AstList;
+};
+
+// NOTE: Hacky solution so we can have a list of TypedIdentList
+typedef struct {
+    AstNodeKind kind;
+    TypedIdentList idents;
+} AstTypedIdentList;
 
 typedef struct {
-    AstStmtType type; // Abrupt, print or Expr promoted to an Stmt
-    AstNode *node; // @NULLABLE
-} AstStmtSingle;
-
-typedef struct {
-    AstStmtType type;
-    AstTypedVarList declarations;
-    AstList *stmts;
-} AstStmtBlock;
-
-typedef struct {
-    AstStmtType type;
-    AstExpr *left; // Identifier literal or array indexing (BinaryExpr)
-    AstExpr *right;
-} AstStmtAssignment;
-
-
-/* Nodes */
-typedef struct {
-    AstNodeType type;
-    AstTypedVarList vars;
-} AstNodeVarList;
-
-typedef struct {
-    AstNodeType type;
+    AstNodeKind kind;
     Str8 name;
-    AstTypedVarList parameters;
+    TypedIdentList parameters;
     AstTypeInfo return_type;
     AstStmt *body;
 } AstFunc;
 
 typedef struct {
-    AstNodeType type;
+    AstNodeKind kind;
     Str8 name;
-    AstTypedVarList members;
+    TypedIdentList members;
 } AstStruct;
 
 typedef struct {
-    AstNodeType type;
+    AstNodeKind kind;
     Str8 name;
-    AstTypedVarList members; // Untyped
+    TypedIdentList members; // For enums, these are actually untyped
 } AstEnum;
 
 typedef struct {
-    AstNodeType type;
-    AstList declarations; // AstTypedVarList
-    AstList functions; // AstFunction
+    AstNodeKind kind;
+    AstList vars; // AstTypedVarList wrapped inside
+    AstList funcs; // AstFunc
     AstList structs; // AstStruct
     AstList enums; // AstEnum
 } AstRoot;
 
 
-#define AS_UNARY(___expr) ((AstExprUnary *)(___expr))
-#define AS_BINARY(___expr) ((AstExprBinary *)(___expr))
-#define AS_LITERAL(___expr) ((AstExprLiteral *)(___expr))
-#define AS_CALL(___expr) ((AstExprCall *)(___expr))
+#define AS_UNARY(___expr) ((AstUnary *)(___expr))
+#define AS_BINARY(___expr) ((AstBinary *)(___expr))
+#define AS_LITERAL(___expr) ((AstLiteral *)(___expr))
+#define AS_CALL(___expr) ((AstCall *)(___expr))
 
-#define AS_WHILE(___stmt) ((AstStmtWhile *)(___stmt))
-#define AS_IF(___stmt) ((AstStmtIf *)(___stmt))
-#define AS_ABRUPT(___stmt) ((AstStmtAbrupt *)(___stmt))
-#define AS_SINGLE(___stmt) ((AstStmtSingle *)(___stmt))
-#define AS_BLOCK(___stmt) ((AstStmtBlock *)(___stmt))
-#define AS_ASSIGNMENT(___stmt) ((AstStmtAssignment *)(___stmt))
+#define AS_WHILE(___stmt) ((AstWhile *)(___stmt))
+#define AS_IF(___stmt) ((AstIf *)(___stmt))
+#define AS_SINGLE(___stmt) ((AstSingle *)(___stmt))
+#define AS_BLOCK(___stmt) ((AstBlock *)(___stmt))
+#define AS_ASSIGNMENT(___stmt) ((AstAssignment *)(___stmt))
 
-#define AS_NODE_VAR_LIST(___node) ((AstNodeVarList *)(___node))
+#define AS_TYPED_IDENT_LIST(___node) ((AstTypedIdentList *)(___node))
 #define AS_FUNC(___node) ((AstFunc *)(___node))
 #define AS_STRUCT(___node) ((AstStruct *)(___node))
 #define AS_ENUM(___node) ((AstEnum *)(___node))
 #define AS_LIST(___node) ((AstList *)(___node))
 #define AS_ROOT(___node) ((AstRoot *)(___node))
 
-extern char *node_type_str_map[AST_NODE_TYPE_LEN];
+extern char *node_kind_str_map[AST_NODE_TYPE_LEN];
+
 
 /* Expresions */
-AstExprUnary *make_unary(Arena *arena, AstExpr *expr, TokenType op);
-AstExprBinary *make_binary(Arena *arena, AstExpr *left, TokenType op, AstExpr *right);
-AstExprLiteral *make_literal(Arena *arena, Token token);
-AstExprCall *make_call(Arena *arena, Str8 identifier, AstNode *args);
+AstUnary *make_unary(Arena *a, AstExpr *expr, TokenKind op);
+AstBinary *make_binary(Arena *a, AstExpr *left, TokenKind op, AstExpr *right);
+AstLiteral *make_literal(Arena *a, Token token);
+AstCall *make_call(Arena *a, Str8View identifier, AstList *args);
 
 /* Statements */
-AstStmtWhile *make_while(Arena *arena, AstExpr *condition, AstStmt *body);
-AstStmtIf *make_if(Arena *arena, AstExpr *condition, AstStmt *then, AstStmt *else_);
-AstStmtSingle *make_single(Arena *arena, AstStmtType single_type, AstNode *print_list);
-AstStmtBlock *make_block(Arena *arena, AstTypedVarList declarations, AstList *statements);
-AstStmtAssignment *make_assignment(Arena *arena, AstExpr *left, AstExpr *right);
+AstWhile *make_while(Arena *a, AstExpr *condition, AstStmt *body);
+AstIf *make_if(Arena *a, AstExpr *condition, AstStmt *then, AstStmt *else_);
+AstSingle *make_single(Arena *a, AstStmtKind single_type, AstNode *node);
+AstBlock *make_block(Arena *a, TypedIdentList declarations, AstList *statements);
+AstAssignment *make_assignment(Arena *a, AstExpr *left, AstExpr *right);
 
-/* */
-AstFunc *make_function(Arena *arena, Str8 name, AstTypedVarList parameters, AstStmt *body,
-                       AstTypeInfo return_type);
-AstStruct *make_struct(Arena *arena, Str8 name, AstTypedVarList members);
-AstEnum *make_enum(Arena *arena, Str8 name, AstTypedVarList values);
-AstListNode *make_list_node(Arena *arena, AstNode *this);
+/* Declarations and other nodes*/
+AstFunc *make_func(Arena *a, Str8 name, TypedIdentList params, AstStmt *body,
+                   AstTypeInfo return_type);
+AstStruct *make_struct(Arena *a, Str8 name, TypedIdentList members);
+AstEnum *make_enum(Arena *a, Str8 name, TypedIdentList values);
+AstListNode *make_list_node(Arena *a, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
-AstList *make_list(Arena *arena, AstNode *head);
-AstNodeVarList *make_node_var_list(Arena *arena, AstTypedVarList vars);
-AstRoot *make_root(Arena *arena, AstList declarations, AstList functions, AstList structs,
-                   AstList enums);
+AstList *make_list(Arena *a, AstNode *head);
+AstTypedIdentList *make_typed_ident_list(Arena *a, TypedIdentList vars);
+AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums);
 
 void ast_print(AstNode *head, u32 indent);
 

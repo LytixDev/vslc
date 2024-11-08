@@ -19,6 +19,7 @@
 #include "compiler/ast.h"
 #include "compiler/compiler.h"
 #include "compiler/error.h"
+#include "compiler/gen.h"
 #include "compiler/parser.h"
 #include "compiler/type.h"
 
@@ -28,15 +29,34 @@
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"
 
-u32 run(char *input)
+
+typedef void (*CompilerPass)(Compiler *c, AstRoot *root);
+
+bool run_compiler_pass(Compiler *c, AstRoot *root, CompilerPass pass)
+{
+    m_arena_clear(c->pass_arena);
+    pass(c, root);
+    for (CompilerError *err = c->e->head; err != NULL; err = err->next) {
+        printf("%s\n", err->msg.str);
+    }
+    return c->e->n_errors > 0;
+}
+
+u32 compile(char *input)
 {
     Arena arena;
     Arena lex_arena;
+    Arena pass_arena;
     m_arena_init_dynamic(&arena, 2, 512);
     m_arena_init_dynamic(&lex_arena, 1, 512);
+    m_arena_init_dynamic(&pass_arena, 1, 512);
 
     ErrorHandler e;
     error_handler_init(&e, input, "test.meta");
+
+    Compiler compiler = { .persist_arena = &arena, .pass_arena = &pass_arena, .e = &e };
+    arraylist_init(&compiler.struct_types, sizeof(TypeInfoStruct *));
+    arraylist_init(&compiler.all_types, sizeof(TypeInfo *));
 
     AstRoot *ast_root = parse(&arena, &lex_arena, &e, input);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
@@ -46,20 +66,29 @@ u32 run(char *input)
         goto done;
     }
 
-    error_handler_reset(&e);
-    Compiler compiler = { .persist_arena = &arena, .e = &e };
-    symbol_generate(&compiler, ast_root);
-    for (CompilerError *err = e.head; err != NULL; err = err->next) {
-        printf("%s\n", err->msg.str);
+    if (run_compiler_pass(&compiler, ast_root, typegen)) {
+        goto done;
+    }
+    if (run_compiler_pass(&compiler, ast_root, infer)) {
+        goto done;
+    }
+    if (run_compiler_pass(&compiler, ast_root, typecheck)) {
+        goto done;
     }
 
     ast_print((AstNode *)ast_root, 0);
     putchar('\n');
 
+    transpile_to_c(&compiler);
+
 done:
-    error_handler_release(&e);
-    m_arena_release(&arena);
-    m_arena_release(&lex_arena);
+    // We could be "good citizens" and release the memory here, but the OS is going to do it
+    // anyways on the process terminating, so it doesn't really make a difference.
+
+    // arraylist_free ...
+    // error_handler_release(&e);
+    // m_arena_release(&arena);
+    // m_arena_release(&lex_arena);
     return e.n_errors;
 }
 
@@ -79,7 +108,7 @@ int main(void)
         i++;
     }
 
-    u32 n_errors = run(input);
+    u32 n_errors = compile(input);
     if (n_errors == 0)
         return 0;
     return 1;
