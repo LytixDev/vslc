@@ -659,13 +659,13 @@ static void graph_add_edges_from_struct_type(Arena *arena, Graph *graph, TypeInf
     }
 }
 
-static bool find_cycles(Compiler *c, Arena *arena_graph, Graph *graph)
+static bool find_cycles(Compiler *c, Graph *graph)
 {
     // TODO: Trajan's algorithm would be better
     // TODO: return what caused the cycle so we can create an error message
 
     /* DFS-based cycle detector */
-    u32 *visited = m_arena_alloc(arena_graph, sizeof(u32) * graph->n_nodes);
+    u32 *visited = m_arena_alloc(c->pass_arena, sizeof(u32) * graph->n_nodes);
     memset(visited, false, sizeof(u32) * graph->n_nodes);
     u32 stack[1024]; // TODO: not-fixed width
     u32 recursion_stack[1024]; // TODO: not-fixed width
@@ -798,7 +798,7 @@ static void resolve_global_types(Compiler *c)
     }
 }
 
-void typecheck(Compiler *c, AstRoot *root)
+void typegen(Compiler *c, AstRoot *root)
 {
     c->symt_root = symt_init(NULL);
 
@@ -832,27 +832,24 @@ void typecheck(Compiler *c, AstRoot *root)
     }
 
     /* Check for cirular type dependencies */
-    ArenaTmp tmp = m_arena_tmp_init(c->persist_arena);
-    Graph graph = make_graph(tmp.arena, (u32)c->struct_types.size);
+    Graph graph = make_graph(c->pass_arena, (u32)c->struct_types.size);
     for (u32 i = 0; i < c->struct_types.size; i++) {
         TypeInfoStruct **t = arraylist_get(&c->struct_types, i);
-        graph_add_edges_from_struct_type(tmp.arena, &graph, *t);
+        graph_add_edges_from_struct_type(c->pass_arena, &graph, *t);
     }
-    find_cycles(c, tmp.arena, &graph);
-    m_arena_tmp_release(tmp);
-    /* If any cycles were found, early return */
-    if (c->e->n_errors != 0) {
-        return;
-    }
+    find_cycles(c, &graph);
+}
 
+void infer(Compiler *c, AstRoot *root)
+{
     /* Bind symbols */
     for (AstListNode *node = root->funcs.head; node != NULL; node = node->next) {
         bind_function(c, AS_FUNC(node->this));
     }
-    if (c->e->n_errors != 0) {
-        return;
-    }
+}
 
+void typecheck(Compiler *c, AstRoot *root)
+{
     /* Typecheck each function */
     for (AstListNode *node = root->funcs.head; node != NULL; node = node->next) {
         AstFunc *func = AS_FUNC(node->this);
@@ -860,7 +857,6 @@ void typecheck(Compiler *c, AstRoot *root)
         assert(func_sym != NULL && "Could not find symbol for function in bind_and_check!?!?");
         typecheck_stmt(c, &func_sym->symt_local, (TypeInfoFunc *)func_sym->type_info, func->body);
     }
-
     /*
     // symt_print(compiler->symt_root);
     // Print symbols

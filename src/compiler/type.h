@@ -131,6 +131,8 @@ struct symbol_t {
 
 
 Symbol *symt_find_sym(SymbolTable *symt, Str8 key);
+void typegen(Compiler *c, AstRoot *root);
+void infer(Compiler *c, AstRoot *root);
 void typecheck(Compiler *compiler, AstRoot *root);
 
 #endif /* TYPE_H */

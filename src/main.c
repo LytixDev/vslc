@@ -29,17 +29,33 @@
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"
 
+
+typedef void (*CompilerPass)(Compiler *c, AstRoot *root);
+
+bool run_compiler_pass(Compiler *c, AstRoot *root, CompilerPass pass)
+{
+    // c->pass_arena
+    pass(c, root);
+    for (CompilerError *err = c->e->head; err != NULL; err = err->next) {
+        printf("%s\n", err->msg.str);
+    }
+    // - Pass arena
+    return c->e->n_errors > 0;
+}
+
 u32 compile(char *input)
 {
     Arena arena;
     Arena lex_arena;
+    Arena pass_arena;
     m_arena_init_dynamic(&arena, 2, 512);
     m_arena_init_dynamic(&lex_arena, 1, 512);
+    m_arena_init_dynamic(&pass_arena, 1, 512);
 
     ErrorHandler e;
     error_handler_init(&e, input, "test.meta");
 
-    Compiler compiler = { .persist_arena = &arena, .e = &e };
+    Compiler compiler = { .persist_arena = &arena, .pass_arena = &arena, .e = &e };
     arraylist_init(&compiler.struct_types, sizeof(TypeInfoStruct *));
     arraylist_init(&compiler.all_types, sizeof(TypeInfo *));
 
@@ -51,12 +67,13 @@ u32 compile(char *input)
         goto done;
     }
 
-    error_handler_reset(&e);
-    typecheck(&compiler, ast_root);
-    for (CompilerError *err = e.head; err != NULL; err = err->next) {
-        printf("%s\n", err->msg.str);
+    if (run_compiler_pass(&compiler, ast_root, typegen)) {
+        goto done;
     }
-    if (e.n_errors != 0) {
+    if (run_compiler_pass(&compiler, ast_root, infer)) {
+        goto done;
+    }
+    if (run_compiler_pass(&compiler, ast_root, typecheck)) {
         goto done;
     }
 

@@ -25,7 +25,7 @@ typedef struct error_handler_t ErrorHandler; // forward decl from error.h
 
 
 typedef struct compiler_t {
-    Arena *pass_arena; // Temporary data which only persist for the duration of a single "pass".
+    Arena *pass_arena; // Temporary data which only persist for the duration of a single pass.
     Arena *persist_arena;
     ErrorHandler *e;
 
