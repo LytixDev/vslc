@@ -253,10 +253,13 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
 {
     write_newline_and_indent(indent);
     switch (head->kind) {
-    // case STMT_WHILE:
-    //     bind_expr(compiler, AS_WHILE(head)->condition);
-    //     bind_stmt(compiler, AS_WHILE(head)->body);
-    //     break;
+    case STMT_WHILE: {
+        AstWhile *stmt = AS_WHILE(head);
+        fprintf(f, "while (");
+        gen_expr(compiler, stmt->condition);
+        fprintf(f, ")");
+        gen_stmt(compiler, stmt->body, indent + 2);
+    }; break;
     case STMT_IF: {
         AstIf *stmt = AS_IF(head);
         fprintf(f, "if (");
