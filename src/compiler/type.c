@@ -24,6 +24,7 @@
 #include "error.h"
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,8 +58,6 @@ static bool type_info_equal(TypeInfo *a, TypeInfo *b)
 {
     /*
      * We use name equivalence to determine if two types are the same.
-     * For arrays and pointers we also need to check if the number of elements and level of
-     * indirection match
      */
     if (a->kind != b->kind) {
         return false;
@@ -71,6 +70,9 @@ static bool type_info_equal(TypeInfo *a, TypeInfo *b)
     if (a->kind == TYPE_POINTER) {
         TypeInfoPointer *aa = (TypeInfoPointer *)a;
         TypeInfoPointer *bb = (TypeInfoPointer *)b;
+        if (aa->pointer_to == NULL || bb->pointer_to == NULL) {
+            return true;
+        }
         return aa->level_of_indirection == bb->level_of_indirection &&
                type_info_equal(aa->pointer_to, bb->pointer_to);
     }
@@ -285,6 +287,11 @@ static void bind_expr(Compiler *c, SymbolTable *symt_local, AstExpr *head)
     } break;
     case EXPR_LITERAL: {
         AstLiteral *lit = AS_LITERAL(head);
+        /* The null constant will get the null symbol */
+        if (lit->lit_type == LIT_NULL) {
+            lit->sym = c->sym_null;
+            break;
+        }
         /* Constant strings and numbers do not need symbols */
         if (lit->lit_type != LIT_IDENT) {
             break;
@@ -391,6 +398,10 @@ static TypeInfo *typecheck_expr(Compiler *c, SymbolTable *symt_local, AstExpr *h
             TypeInfoPointer *tp = make_type_info(c->persist_arena, TYPE_POINTER, t->generated_by);
             tp->info.is_resolved = true;
             tp->pointer_to = t;
+            tp->level_of_indirection = 1;
+            if (t->kind == TYPE_POINTER) {
+                tp->level_of_indirection += ((TypeInfoPointer *)t)->level_of_indirection;
+            }
             head->type = (TypeInfo *)tp;
         } else if (expr->op == TOKEN_STAR) {
             if (t->kind != TYPE_POINTER) {
@@ -441,7 +452,7 @@ static TypeInfo *typecheck_expr(Compiler *c, SymbolTable *symt_local, AstExpr *h
     } break;
     case EXPR_LITERAL: {
         AstLiteral *lit = AS_LITERAL(head);
-        if (lit->lit_type == LIT_IDENT) {
+        if (lit->lit_type == LIT_IDENT || lit->lit_type == LIT_NULL) {
             head->type = lit->sym->type_info;
         } else {
             // TODO: temporary assumption that every constant literal that is not an ident is a s32
@@ -842,6 +853,15 @@ void typegen(Compiler *c, AstRoot *root)
 
 void infer(Compiler *c, AstRoot *root)
 {
+    /* Create the symbol for the null pointer */
+    Str8Builder sb = make_str_builder(c->persist_arena);
+    str_builder_append_cstr(&sb, "null", 4);
+    Str8 name = str_builder_end(&sb, true);
+    TypeInfoPointer *t = make_type_info(c->persist_arena, TYPE_POINTER, name);
+    t->info.is_resolved = true;
+    t->pointer_to = NULL;
+    c->sym_null = symt_new_sym(c, &c->symt_root, SYMBOL_NULL_PTR, name, (TypeInfo *)t, NULL);
+
     /* Bind symbols */
     for (AstListNode *node = root->funcs.head; node != NULL; node = node->next) {
         bind_function(c, AS_FUNC(node->this));

@@ -34,12 +34,11 @@ typedef void (*CompilerPass)(Compiler *c, AstRoot *root);
 
 bool run_compiler_pass(Compiler *c, AstRoot *root, CompilerPass pass)
 {
-    // c->pass_arena
+    m_arena_clear(c->pass_arena);
     pass(c, root);
     for (CompilerError *err = c->e->head; err != NULL; err = err->next) {
         printf("%s\n", err->msg.str);
     }
-    // - Pass arena
     return c->e->n_errors > 0;
 }
 
@@ -55,7 +54,7 @@ u32 compile(char *input)
     ErrorHandler e;
     error_handler_init(&e, input, "test.meta");
 
-    Compiler compiler = { .persist_arena = &arena, .pass_arena = &arena, .e = &e };
+    Compiler compiler = { .persist_arena = &arena, .pass_arena = &pass_arena, .e = &e };
     arraylist_init(&compiler.struct_types, sizeof(TypeInfoStruct *));
     arraylist_init(&compiler.all_types, sizeof(TypeInfo *));
 

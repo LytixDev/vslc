@@ -30,6 +30,7 @@ typedef struct compiler_t {
     ErrorHandler *e;
 
     SymbolTable symt_root;
+    Symbol *sym_null; // The null pointer constant
 
     ArrayList all_types; // Holds TypeInfo **. Every base type lives here.
     ArrayList struct_types; // Holds TypeInfoStruct **

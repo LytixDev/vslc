@@ -62,6 +62,7 @@ TokenKind token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_WHILE,
     0, // TOKEN_DO,
     0, // TOKEN_VAR,
+    0, // TOKEN_NULL,
 };
 
 /* Forwards */
@@ -249,23 +250,13 @@ static AstExpr *parse_primary(Parser *parser)
             return (AstExpr *)make_literal(parser->arena, token);
         }
     }
+    case TOKEN_NULL: {
+        return (AstExpr *)make_literal(parser->arena, token);
+    };
     default:
         error_parse(parser->lexer.e, "Invalid start of a primary expression", token);
         return NULL;
     }
-}
-
-static AstBinary *parse_member_access(Parser *parser, AstExpr *left)
-{
-    // NOTE: Temporary hack for LHS of assignment.
-    /* Came from '.' aka TOKEN_DOT */
-    Token ident = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected a struct member name");
-    AstExpr *right = (AstExpr *)make_literal(parser->arena, ident);
-    if (match_token(parser, TOKEN_DOT)) {
-        right = (AstExpr *)make_binary(parser->arena, left, TOKEN_DOT, right);
-        return parse_member_access(parser, right);
-    }
-    return make_binary(parser->arena, left, TOKEN_DOT, right);
 }
 
 static AstExpr *parse_increasing_precedence(Parser *parser, AstExpr *left, u32 precedence)

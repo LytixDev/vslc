@@ -146,9 +146,20 @@ static void gen_struct(Compiler *compiler, Symbol *sym)
 static void gen_expr(Compiler *compiler, AstExpr *head)
 {
     switch (head->kind) {
-    // case EXPR_UNARY:
-    //     bind_expr(compiler, symt_local, AS_UNARY(head)->expr);
-    //     break;
+    case EXPR_UNARY: {
+        AstUnary *expr = AS_UNARY(head);
+        switch (expr->op) {
+        case TOKEN_STAR:
+            fprintf(f, "*");
+            break;
+        case TOKEN_AMPERSAND:
+            fprintf(f, "&");
+            break;
+        default:
+            ASSERT_NOT_REACHED;
+        }
+        gen_expr(compiler, expr->expr);
+    }; break;
     case EXPR_BINARY: {
         AstBinary *expr = AS_BINARY(head);
 
@@ -211,7 +222,9 @@ static void gen_expr(Compiler *compiler, AstExpr *head)
     } break;
     case EXPR_LITERAL: {
         AstLiteral *lit = AS_LITERAL(head);
-        if (lit->lit_type == LIT_NUM) {
+        if (lit->lit_type == LIT_NULL) {
+            fprintf(f, "NULL");
+        } else if (lit->lit_type == LIT_NUM) {
             bool success;
             u32 num = str_view_to_u32(lit->literal, &success);
             if (!success) {

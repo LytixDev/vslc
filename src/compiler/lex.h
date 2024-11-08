@@ -81,6 +81,7 @@ typedef enum {
     TOKEN_WHILE,
     TOKEN_DO,
     TOKEN_VAR,
+    TOKEN_NULL,
 
     TOKEN_TYPE_ENUM_COUNT,
 } TokenKind;

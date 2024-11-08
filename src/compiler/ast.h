@@ -56,6 +56,7 @@ typedef enum {
     LIT_STR,
     LIT_IDENT,
     LIT_NUM,
+    LIT_NULL,
 } LiteralType;
 
 typedef enum {

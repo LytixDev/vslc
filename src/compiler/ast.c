@@ -56,6 +56,8 @@ AstLiteral *make_literal(Arena *a, Token token)
         literal->lit_type = LIT_NUM;
     } else if (token.kind == TOKEN_STR) {
         literal->lit_type = LIT_STR;
+    } else if (token.kind == TOKEN_NULL) {
+        literal->lit_type = LIT_NULL;
     } else {
         literal->lit_type = LIT_IDENT;
     }

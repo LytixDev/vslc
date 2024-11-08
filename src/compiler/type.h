@@ -89,7 +89,7 @@ typedef struct {
 
 typedef struct {
     TypeInfo info;
-    TypeInfo *pointer_to;
+    TypeInfo *pointer_to; // @NULLABLE for the null pointer
     s32 level_of_indirection;
 } TypeInfoPointer;
 
@@ -104,6 +104,7 @@ typedef enum {
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
     SYMBOL_ENUM_MEMBER, // Note: what about struct members?
+    SYMBOL_NULL_PTR, // null
 
     SYMBOL_TYPE_LEN,
 } SymbolKind;
