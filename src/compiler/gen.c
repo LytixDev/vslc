@@ -143,7 +143,7 @@ static void gen_struct(Compiler *compiler, Symbol *sym)
     fprintf(f, "};\n");
 }
 
-static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
+static void gen_expr(Compiler *compiler, AstExpr *head)
 {
     switch (head->kind) {
     // case EXPR_UNARY:
@@ -152,18 +152,18 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
     case EXPR_BINARY: {
         AstBinary *expr = AS_BINARY(head);
 
-        if (expr->op == TOKEN_DOT && expr->t->kind == TYPE_ENUM) {
-            TypeInfoEnum *t = (TypeInfoEnum *)expr->t;
+        if (expr->op == TOKEN_DOT && expr->type->kind == TYPE_ENUM) {
+            TypeInfoEnum *t = (TypeInfoEnum *)expr->type;
             fprintf(f, "%s_", t->info.generated_by.str);
-            gen_expr(compiler, symt_local, expr->right);
+            gen_expr(compiler, expr->right);
             break;
         }
 
         fprintf(f, "(");
-        if (expr->left->t->kind == TYPE_POINTER && expr->op == TOKEN_DOT) {
+        if (expr->left->type->kind == TYPE_POINTER && expr->op == TOKEN_DOT) {
             fprintf(f, "*");
         }
-        gen_expr(compiler, symt_local, expr->left);
+        gen_expr(compiler, expr->left);
         fprintf(f, ")");
 
         switch (expr->op) {
@@ -203,10 +203,10 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         default:
             ASSERT_NOT_REACHED;
         }
-        gen_expr(compiler, symt_local, expr->right);
+        gen_expr(compiler, expr->right);
         // /* Member access are bound in after typechecking */
         // if (expr->op != TOKEN_DOT) {
-        //     bind_expr(compiler, symt_local, expr->right);
+        //     bind_expr(compiler, expr->right);
         // }
     } break;
     case EXPR_LITERAL: {
@@ -229,11 +229,11 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
         fprintf(f, "%s(", call->identifier.str);
         if (call->args != NULL) {
             if ((u32)call->args->kind == (u32)EXPR_LITERAL) {
-                gen_expr(compiler, symt_local, (AstExpr *)call->args);
+                gen_expr(compiler, (AstExpr *)call->args);
             } else {
                 AstList *args = (AstList *)call->args;
                 for (AstListNode *node = args->head; node != NULL; node = node->next) {
-                    gen_expr(compiler, symt_local, (AstExpr *)node->this);
+                    gen_expr(compiler, (AstExpr *)node->this);
                     if (node->next != NULL) {
                         fprintf(f, ", ");
                     }
@@ -249,24 +249,24 @@ static void gen_expr(Compiler *compiler, SymbolTable *symt_local, AstExpr *head)
 }
 
 
-static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head, u32 indent)
+static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
 {
     write_newline_and_indent(indent);
     switch (head->kind) {
     // case STMT_WHILE:
-    //     bind_expr(compiler, symt_local, AS_WHILE(head)->condition);
-    //     bind_stmt(compiler, symt_local, AS_WHILE(head)->body);
+    //     bind_expr(compiler, AS_WHILE(head)->condition);
+    //     bind_stmt(compiler, AS_WHILE(head)->body);
     //     break;
     case STMT_IF: {
         AstIf *stmt = AS_IF(head);
         fprintf(f, "if (");
-        gen_expr(compiler, symt_local, stmt->condition);
+        gen_expr(compiler, stmt->condition);
         fprintf(f, ") {");
-        gen_stmt(compiler, symt_local, stmt->then, indent + 2);
+        gen_stmt(compiler, stmt->then, indent + 2);
         if (stmt->else_) {
             write_newline_and_indent(indent);
             fprintf(f, "} else ");
-            gen_stmt(compiler, symt_local, stmt->else_, indent + 2);
+            gen_stmt(compiler, stmt->else_, indent + 2);
         }
         write_newline_and_indent(indent);
         fprintf(f, "}");
@@ -276,13 +276,13 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     case STMT_RETURN: {
         AstSingle *stmt = AS_SINGLE(head);
         fprintf(f, "return ");
-        gen_expr(compiler, symt_local, (AstExpr *)stmt->node);
+        gen_expr(compiler, (AstExpr *)stmt->node);
         fprintf(f, ";");
     }; break;
     // case STMT_EXPR: {
     //     AstStmtSingle *stmt = AS_SINGLE(head);
     //     if (stmt->node) {
-    //         bind_expr(compiler, symt_local, (AstExpr *)stmt->node);
+    //         bind_expr(compiler, (AstExpr *)stmt->node);
     //     }
     // }; break;
     case STMT_PRINT: {
@@ -291,7 +291,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
         /* Build printf format */
         for (AstListNode *node = stmt->head; node != NULL; node = node->next) {
             str_builder_append_u8(&sb, '%');
-            str_builder_append_u8(&sb, type_info_to_printf_format(((AstExpr *)node->this)->t));
+            str_builder_append_u8(&sb, type_info_to_printf_format(((AstExpr *)node->this)->type));
             if (node->next != NULL) {
                 str_builder_append_u8(&sb, ',');
                 str_builder_append_u8(&sb, ' ');
@@ -302,7 +302,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
         fprintf(f, "printf(\"%s\\n\", ", fmt.str);
 
         for (AstListNode *node = stmt->head; node != NULL; node = node->next) {
-            gen_expr(compiler, symt_local, (AstExpr *)node->this);
+            gen_expr(compiler, (AstExpr *)node->this);
             if (node->next != NULL) {
                 fprintf(f, ", ");
             }
@@ -320,7 +320,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
         /* Declarations */
         for (u32 i = 0; i < stmt->declarations.len; i++) {
             TypedIdent decl = stmt->declarations.vars[i];
-            Symbol *sym = symt_find_sym(symt_local, decl.name);
+            Symbol *sym = symt_find_sym(stmt->symt_local, decl.name);
             Str8 type_name = type_info_to_c_type_name(compiler, sym->type_info);
             /*
              * var x: s32, y: pair
@@ -331,7 +331,7 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
         }
         /* Statement */
         for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {
-            gen_stmt(compiler, symt_local, (AstStmt *)node->this, indent);
+            gen_stmt(compiler, (AstStmt *)node->this, indent);
         }
 
         indent -= 2;
@@ -340,9 +340,9 @@ static void gen_stmt(Compiler *compiler, SymbolTable *symt_local, AstStmt *head,
     }; break;
     case STMT_ASSIGNMENT: {
         AstAssignment *stmt = AS_ASSIGNMENT(head);
-        gen_expr(compiler, symt_local, stmt->left);
+        gen_expr(compiler, stmt->left);
         fprintf(f, " = ");
-        gen_expr(compiler, symt_local, stmt->right);
+        gen_expr(compiler, stmt->right);
         fprintf(f, ";");
     }; break;
     default:
@@ -373,9 +373,8 @@ static void gen_func(Compiler *compiler, Symbol *sym)
     fprintf(f, ")\n{");
 
     /* Generate function body */
-    SymbolTable *symt_local = &sym->symt_local;
     AstFunc *func_node = (AstFunc *)sym->node;
-    gen_stmt(compiler, symt_local, func_node->body, 2);
+    gen_stmt(compiler, func_node->body, 2);
 
     fprintf(f, "\n}");
 }
@@ -403,11 +402,11 @@ void transpile_to_c(Compiler *compiler)
     write_base();
     fprintf(f, "\n\n");
 
-    SymbolTable *symt = &compiler->symt_root;
+    SymbolTable *symt_root = &compiler->symt_root;
 
     /* Generate enums */
-    for (u32 i = 0; i < symt->sym_len; i++) {
-        Symbol *sym = symt->symbols[i];
+    for (u32 i = 0; i < symt_root->sym_len; i++) {
+        Symbol *sym = symt_root->symbols[i];
         if (sym->kind == SYMBOL_TYPE) {
             if (sym->type_info->kind == TYPE_ENUM) {
                 gen_enum(compiler, sym);
@@ -418,8 +417,8 @@ void transpile_to_c(Compiler *compiler)
     fprintf(f, "\n");
 
     /* Forward declare structs */
-    for (u32 i = 0; i < symt->sym_len; i++) {
-        Symbol *sym = symt->symbols[i];
+    for (u32 i = 0; i < symt_root->sym_len; i++) {
+        Symbol *sym = symt_root->symbols[i];
         if (sym->kind == SYMBOL_TYPE) {
             if (sym->type_info->kind == TYPE_STRUCT) {
                 fprintf(f, "typedef struct %s_t %s;\n", sym->name.str, sym->name.str);
@@ -430,8 +429,8 @@ void transpile_to_c(Compiler *compiler)
     fprintf(f, "\n");
 
     /* Generate structs */
-    for (u32 i = 0; i < symt->sym_len; i++) {
-        Symbol *sym = symt->symbols[i];
+    for (u32 i = 0; i < symt_root->sym_len; i++) {
+        Symbol *sym = symt_root->symbols[i];
         if (sym->kind == SYMBOL_TYPE) {
             if (sym->type_info->kind == TYPE_STRUCT) {
                 gen_struct(compiler, sym);
@@ -442,8 +441,8 @@ void transpile_to_c(Compiler *compiler)
     fprintf(f, "\n");
 
     /* Generate functions */
-    for (u32 i = 0; i < symt->sym_len; i++) {
-        Symbol *sym = symt->symbols[i];
+    for (u32 i = 0; i < symt_root->sym_len; i++) {
+        Symbol *sym = symt_root->symbols[i];
         if (sym->kind == SYMBOL_FUNC) {
             gen_func(compiler, sym);
             fprintf(f, "\n\n");

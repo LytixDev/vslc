@@ -56,7 +56,7 @@ typedef struct {
     u32 offset;
     union {
         TypeInfo *type;
-        AstTypeInfo ati;
+        AstTypeInfo ast_type_info; // Used for resolution of the type
     };
 } TypeInfoStructMember;
 
@@ -103,7 +103,7 @@ typedef enum {
     SYMBOL_GLOBAL_VAR,
     SYMBOL_LOCAL_VAR,
     SYMBOL_PARAM,
-    SYMBOL_MEMBER,
+    SYMBOL_ENUM_MEMBER, // Note: what about struct members?
 
     SYMBOL_TYPE_LEN,
 } SymbolKind;
@@ -116,14 +116,6 @@ struct symbol_table_t {
     Symbol **symbols;
     u32 sym_len;
     u32 sym_cap;
-
-    // TODO: SOA? List of Struct types, Enum types ...
-    TypeInfo **types;
-    u32 type_len;
-    u32 type_cap;
-
-    u32 struct_count;
-
     HashMap map; // Key: string (u8 *), Value: *Symbol
     SymbolTable *parent; // @NULLABLE
 };
@@ -139,6 +131,6 @@ struct symbol_t {
 
 
 Symbol *symt_find_sym(SymbolTable *symt, Str8 key);
-void symbol_generate(Compiler *compiler, AstRoot *root);
+void typecheck(Compiler *compiler, AstRoot *root);
 
 #endif /* TYPE_H */

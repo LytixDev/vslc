@@ -17,6 +17,7 @@
 #ifndef COMPILER_H
 #define COMPILER_H
 
+#include "base/nicc.h"
 #include "base/sac_single.h"
 #include "type.h"
 
@@ -24,14 +25,14 @@ typedef struct error_handler_t ErrorHandler; // forward decl from error.h
 
 
 typedef struct compiler_t {
-    // For temporary data that ONLY needs to persist for the duration of a single compiler pass
-    // Cleared before each pass.
+    Arena *pass_arena; // Temporary data which only persist for the duration of a single "pass".
     Arena *persist_arena;
-    Arena *pass_arena;
+    ErrorHandler *e;
 
     SymbolTable symt_root;
 
-    ErrorHandler *e;
+    ArrayList all_types; // Holds TypeInfo **. Every base type lives here.
+    ArrayList struct_types; // Holds TypeInfoStruct **
 } Compiler;
 
 #endif /* COMPILER_H */

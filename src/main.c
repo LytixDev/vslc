@@ -29,7 +29,7 @@
 #define SAC_IMPLEMENTATION
 #include "base/sac_single.h"
 
-u32 run(char *input)
+u32 compile(char *input)
 {
     Arena arena;
     Arena lex_arena;
@@ -38,6 +38,10 @@ u32 run(char *input)
 
     ErrorHandler e;
     error_handler_init(&e, input, "test.meta");
+
+    Compiler compiler = { .persist_arena = &arena, .e = &e };
+    arraylist_init(&compiler.struct_types, sizeof(TypeInfoStruct *));
+    arraylist_init(&compiler.all_types, sizeof(TypeInfo *));
 
     AstRoot *ast_root = parse(&arena, &lex_arena, &e, input);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
@@ -48,10 +52,12 @@ u32 run(char *input)
     }
 
     error_handler_reset(&e);
-    Compiler compiler = { .persist_arena = &arena, .e = &e };
-    symbol_generate(&compiler, ast_root);
+    typecheck(&compiler, ast_root);
     for (CompilerError *err = e.head; err != NULL; err = err->next) {
         printf("%s\n", err->msg.str);
+    }
+    if (e.n_errors != 0) {
+        goto done;
     }
 
     ast_print((AstNode *)ast_root, 0);
@@ -60,9 +66,13 @@ u32 run(char *input)
     transpile_to_c(&compiler);
 
 done:
-    error_handler_release(&e);
-    m_arena_release(&arena);
-    m_arena_release(&lex_arena);
+    // We could be "good citizens" and release the memory here, but the OS is going to do it
+    // anyways on the process terminating, so it doesn't really make a difference.
+
+    // arraylist_free ...
+    // error_handler_release(&e);
+    // m_arena_release(&arena);
+    // m_arena_release(&lex_arena);
     return e.n_errors;
 }
 
@@ -82,7 +92,7 @@ int main(void)
         i++;
     }
 
-    u32 n_errors = run(input);
+    u32 n_errors = compile(input);
     if (n_errors == 0)
         return 0;
     return 1;

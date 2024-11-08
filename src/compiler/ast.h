@@ -21,6 +21,7 @@
 #include "lex.h"
 
 typedef struct symbol_t Symbol; // forward from type.h
+typedef struct symbol_table_t SymbolTable; // forward from type.h
 typedef struct type_info_t TypeInfo; // forward from type.h
 
 
@@ -99,7 +100,7 @@ typedef enum {
  */
 typedef struct expr_t {
     AstExprKind kind;
-    TypeInfo *t; // @NULLABLE. Only set after typechecking.
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
 } AstExpr;
 
 typedef struct stmt_t {
@@ -123,7 +124,7 @@ typedef struct {
 
 typedef struct {
     AstExprKind kind;
-    TypeInfo *t; // @NULLABLE. Only set after typechecking.
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
     AstExpr *left;
     TokenKind op;
     AstExpr *right;
@@ -131,7 +132,7 @@ typedef struct {
 
 typedef struct {
     AstExprKind kind;
-    TypeInfo *t; // @NULLABLE. Only set after typechecking.
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
     Symbol *sym; // @NULLABLE. After type checking, each TOKEN_IDENT is bound to a symbol
     LiteralType lit_type; // TOKEN_NUM, TOKEN_STR or TOKEN_IDENT
     Str8View literal; // Guranteed to be zero-terminated for STR and IDENT aka Str8
@@ -139,7 +140,7 @@ typedef struct {
 
 typedef struct {
     AstExprKind kind;
-    TypeInfo *t; // @NULLABLE. Only set after typechecking.
+    TypeInfo *type; // @NULLABLE. Only set after typechecking.
     Str8 identifier;
     AstList *args; // @NULLABLE.
 } AstCall;
@@ -167,6 +168,8 @@ typedef struct {
     AstStmtKind kind;
     TypedIdentList declarations;
     AstList *stmts;
+    // NOTE: Is this where this should be?
+    SymbolTable *symt_local; // @NULLABLE. Set after bind_stmt(), just before typecheck
 } AstBlock;
 
 typedef struct {
