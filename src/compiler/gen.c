@@ -155,6 +155,9 @@ static void gen_expr(Compiler *compiler, AstExpr *head)
         case TOKEN_AMPERSAND:
             fprintf(f, "&");
             break;
+        case TOKEN_MINUS:
+            fprintf(f, "-");
+            break;
         default:
             ASSERT_NOT_REACHED;
         }
@@ -162,21 +165,18 @@ static void gen_expr(Compiler *compiler, AstExpr *head)
     }; break;
     case EXPR_BINARY: {
         AstBinary *expr = AS_BINARY(head);
-
         if (expr->op == TOKEN_DOT && expr->type->kind == TYPE_ENUM) {
             TypeInfoEnum *t = (TypeInfoEnum *)expr->type;
             fprintf(f, "%s_", t->info.generated_by.str);
             gen_expr(compiler, expr->right);
             break;
         }
-
         fprintf(f, "(");
         if (expr->left->type->kind == TYPE_POINTER && expr->op == TOKEN_DOT) {
             fprintf(f, "*");
         }
         gen_expr(compiler, expr->left);
         fprintf(f, ")");
-
         switch (expr->op) {
         case TOKEN_PLUS:
             fprintf(f, " + ");
@@ -215,10 +215,6 @@ static void gen_expr(Compiler *compiler, AstExpr *head)
             ASSERT_NOT_REACHED;
         }
         gen_expr(compiler, expr->right);
-        // /* Member access are bound in after typechecking */
-        // if (expr->op != TOKEN_DOT) {
-        //     bind_expr(compiler, expr->right);
-        // }
     } break;
     case EXPR_LITERAL: {
         AstLiteral *lit = AS_LITERAL(head);
@@ -256,8 +252,7 @@ static void gen_expr(Compiler *compiler, AstExpr *head)
         fprintf(f, ")");
     } break;
     default:
-        (void)0;
-        // ASSERT_NOT_REACHED;
+        ASSERT_NOT_REACHED;
     }
 }
 
@@ -287,20 +282,23 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
         write_newline_and_indent(indent);
         fprintf(f, "}");
     } break;
-    // case STMT_ABRUPT_BREAK:
-    // case STMT_ABRUPT_CONTINUE:
+    case STMT_BREAK:
+        fprintf(f, "break");
+        break;
+    case STMT_CONTINUE:
+        fprintf(f, "continue");
+        break;
     case STMT_RETURN: {
         AstSingle *stmt = AS_SINGLE(head);
         fprintf(f, "return ");
         gen_expr(compiler, (AstExpr *)stmt->node);
         fprintf(f, ";");
     }; break;
-    // case STMT_EXPR: {
-    //     AstStmtSingle *stmt = AS_SINGLE(head);
-    //     if (stmt->node) {
-    //         bind_expr(compiler, (AstExpr *)stmt->node);
-    //     }
-    // }; break;
+    case STMT_EXPR: {
+        AstSingle *stmt = AS_SINGLE(head);
+        gen_expr(compiler, (AstExpr *)stmt->node);
+        fprintf(f, ";");
+    }; break;
     case STMT_PRINT: {
         AstList *stmt = AS_LIST(head);
         Str8Builder sb = make_str_builder(compiler->persist_arena); // TODO: pass arena
@@ -362,8 +360,7 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
         fprintf(f, ";");
     }; break;
     default:
-        (void)0;
-        // ASSERT_NOT_REACHED;
+        ASSERT_NOT_REACHED;
     }
 }
 
@@ -401,12 +398,6 @@ static void gen_func(Compiler *compiler, Symbol *sym)
  */
 void transpile_to_c(Compiler *compiler)
 {
-    // gloabl symbols !
-    // enums
-    // structs
-    // globals
-    // functions
-
     f = fopen("out.c", "w");
     if (f == NULL) {
         Str8 msg = STR8_LIT("Could not open file out.c");
