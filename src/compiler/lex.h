@@ -83,6 +83,7 @@ typedef enum {
     TOKEN_DO,
     TOKEN_VAR,
     TOKEN_NULL,
+    TOKEN_COMPILER,
 
     TOKEN_TYPE_ENUM_COUNT,
 } TokenKind;

@@ -349,10 +349,15 @@ void ast_print(AstNode *head, u32 indent)
     }; break;
     case AST_FUNC: {
         AstFunc *func = AS_FUNC(head);
+        if (func->body != NULL) {
+            printf("compiler internal ");
+        }
         printf("name=%.*s", STR8VIEW_PRINT(func->name));
         printf(" parameters=");
         ast_print_typed_var_list(func->parameters);
-        ast_print_stmt(func->body, indent + 1);
+        if (func->body != NULL) {
+            ast_print_stmt(func->body, indent + 1);
+        }
     }; break;
     case AST_STRUCT: {
         AstStruct *struct_decl = AS_STRUCT(head);

@@ -64,6 +64,7 @@ TokenKind token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_DO,
     0, // TOKEN_VAR,
     0, // TOKEN_NULL,
+    0, // TOKEN_COMPILER,
 };
 
 /* Forwards */
@@ -512,7 +513,7 @@ static TypedIdentList parse_local_decl_list(Parser *parser)
     return identifiers;
 }
 
-static AstFunc *parse_func(Parser *parser)
+static AstFunc *parse_func(Parser *parser, bool require_body)
 {
     /* Came from TOKEN_FUNC */
     Token identifier = consume_or_err(parser, TOKEN_IDENTIFIER, "Expected function name");
@@ -525,7 +526,10 @@ static AstFunc *parse_func(Parser *parser)
     consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to terminate function parameter list");
 
     AstTypeInfo return_type = parse_type(parser, true);
-    AstStmt *body = parse_stmt(parser);
+    AstStmt *body = NULL;
+    if (require_body) {
+        body = parse_stmt(parser);
+    }
     AstFunc *func = make_func(parser->arena, identifier.lexeme, vars, body, return_type);
     return func;
 }
@@ -548,8 +552,14 @@ static AstRoot *parse_root(Parser *parser)
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)node_vars);
             ast_list_push_back(&vars, node_node);
         }; break;
+        case TOKEN_COMPILER: {
+            consume_or_err(parser, TOKEN_FUNC, "Expected a function");
+            AstFunc *func = parse_func(parser, false);
+            AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
+            ast_list_push_back(&funcs, func_node);
+        }; break;
         case TOKEN_FUNC: {
-            AstFunc *func = parse_func(parser);
+            AstFunc *func = parse_func(parser, true);
             AstListNode *func_node = make_list_node(parser->arena, (AstNode *)func);
             ast_list_push_back(&funcs, func_node);
         }; break;

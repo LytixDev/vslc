@@ -206,7 +206,7 @@ typedef struct {
     Str8 name;
     TypedIdentList parameters;
     AstTypeInfo return_type;
-    AstStmt *body;
+    AstStmt *body; // @NULLABLE. If NULL then the function is a compiler intrinsic.
 } AstFunc;
 
 typedef struct {

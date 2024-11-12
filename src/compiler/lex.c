@@ -26,8 +26,8 @@
 
 
 char *reserved_words[] = {
-    "func",     "struct", "enum", "begin", "end",   "return", "print", "break",
-    "continue", "if",     "then", "else",  "while", "do",     "var",   "null",
+    "func", "struct", "enum", "begin", "end", "return", "print", "break",    "continue",
+    "if",   "then",   "else", "while", "do",  "var",    "null",  "compiler",
 };
 
 
@@ -340,12 +340,12 @@ static Token lex_comment(Arena *arena, Lexer *lexer)
 
 /* Debug stuff */
 char *token_type_str_map[TOKEN_TYPE_ENUM_COUNT] = {
-    "ERR",       "NUM",    "STR",    "COLON",    "ASSIGNMENT", "PLUS",  "MINUS",
-    "STAR",      "SLASH",  "LSHIFT", "RSHIFT",   "EQ",         "NEQ",   "LESS",
-    "GREATER",   "LPAREN", "RPAREN", "LBRACKET", "RBRACKET",   "DOT",   "COMMA",
-    "AMPERSAND", "CARET",  "AT",     "EOF",      "IDENTIFIER", "FUNC",  "STRUCT",
-    "ENUM",      "BEGIN",  "END",    "RETURN",   "PRINT",      "BREAK", "CONTINUE",
-    "IF",        "THEN",   "ELSE",   "WHILE",    "DO",         "VAR",
+    "ERR",    "NUM",        "STR",      "COLON",  "ASSIGNMENT", "PLUS",      "MINUS",   "STAR",
+    "SLASH",  "LSHIFT",     "RSHIFT",   "EQ",     "NEQ",        "LESS",      "GREATER", "LPAREN",
+    "RPAREN", "LBRACKET",   "RBRACKET", "DOT",    "COMMA",      "AMPERSAND", "CARET",   "AT",
+    "EOF",    "IDENTIFIER", "FUNC",     "STRUCT", "ENUM",       "BEGIN",     "END",     "RETURN",
+    "PRINT",  "BREAK",      "CONTINUE", "IF",     "THEN",       "ELSE",      "WHILE",   "DO",
+    "VAR",    "NULL",       "COMPILER",
 };
 
 
