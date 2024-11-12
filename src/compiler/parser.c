@@ -47,6 +47,7 @@ TokenKind token_precedences[TOKEN_TYPE_ENUM_COUNT] = {
     0, // TOKEN_COMMA,
     0, // TOKEN_AMPERSAND,
     0, // TOKEN_CARET,
+    0, // TOKEN_AT,
     0, // TOKEN_EOF,
     0, // TOKEN_IDENTIFIER,
     0, // TOKEN_FUNC,
@@ -193,7 +194,7 @@ static AstTypeInfo parse_type(Parser *parser, bool allow_array_types)
                           .pointer_indirection = pointer_indirection };
 }
 
-static AstCall *parse_call(Parser *parser, Token identifier)
+static AstCall *parse_call(Parser *parser, Token identifier, bool is_comptime)
 {
     /* Came from TOKEN_IDENTIFIER and then peeked TOKEN_LPAREN */
     next_token(parser);
@@ -202,7 +203,7 @@ static AstCall *parse_call(Parser *parser, Token identifier)
         args = parse_expr_list(parser);
         consume_or_err(parser, TOKEN_RPAREN, "Expected ')' to end function call");
     }
-    return make_call(parser->arena, identifier.lexeme, args);
+    return make_call(parser->arena, is_comptime, identifier.lexeme, args);
 }
 
 static AstExpr *parse_primary(Parser *parser)
@@ -237,7 +238,7 @@ static AstExpr *parse_primary(Parser *parser)
     case TOKEN_IDENTIFIER: {
         Token next = peek_token(parser);
         if (next.kind == TOKEN_LPAREN) {
-            return (AstExpr *)parse_call(parser, token);
+            return (AstExpr *)parse_call(parser, token, false);
         } else if (next.kind == TOKEN_LBRACKET) {
             /* Parse array indexing as a binary op */
             next_token(parser);
@@ -427,7 +428,7 @@ static AstStmt *parse_stmt(Parser *parser)
         Token next = peek_token(parser);
         if (next.kind == TOKEN_LPAREN) {
             /* Function call, promoted to a statement */
-            AstNode *call = (AstNode *)parse_call(parser, token);
+            AstNode *call = (AstNode *)parse_call(parser, token, false);
             return (AstStmt *)make_single(parser->arena, STMT_EXPR, call);
         }
         break; /* Can still be the LHS of an assignment */
@@ -535,6 +536,7 @@ static AstRoot *parse_root(Parser *parser)
     AstList funcs = { .kind = AST_LIST, .head = NULL, .tail = NULL };
     AstList structs = { .kind = AST_LIST, .head = NULL, .tail = NULL };
     AstList enums = { .kind = AST_LIST, .head = NULL, .tail = NULL };
+    AstList calls = { .kind = AST_LIST, .head = NULL, .tail = NULL };
 
     Token next;
     while ((next = next_token(parser)).kind != TOKEN_EOF) {
@@ -567,6 +569,13 @@ static AstRoot *parse_root(Parser *parser)
             AstListNode *node_node = make_list_node(parser->arena, (AstNode *)enum_decl);
             ast_list_push_back(&enums, node_node);
         }; break;
+        case TOKEN_AT: {
+            Token function_identifier =
+                consume_or_err(parser, TOKEN_IDENTIFIER, "Expected an function name after '@'");
+            AstCall *call = parse_call(parser, function_identifier, true);
+            AstListNode *call_node = make_list_node(parser->arena, (AstNode *)call);
+            ast_list_push_back(&calls, call_node);
+        }; break;
         default: {
             error_parse(parser->lexer.e, "Illegal first token. Expected var, struct or func", next);
             break;
@@ -574,7 +583,7 @@ static AstRoot *parse_root(Parser *parser)
         }
     }
 
-    return make_root(parser->arena, vars, funcs, structs, enums);
+    return make_root(parser->arena, vars, funcs, structs, enums, calls);
 }
 
 AstRoot *parse(Arena *arena, Arena *lex_arena, ErrorHandler *e, char *input)

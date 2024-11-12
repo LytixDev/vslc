@@ -62,6 +62,7 @@ typedef enum {
     TOKEN_COMMA,
     TOKEN_AMPERSAND, // &
     TOKEN_CARET, // ^
+    TOKEN_AT, // @
     TOKEN_EOF,
 
     // Identifier and reserved words

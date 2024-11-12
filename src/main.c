@@ -66,20 +66,21 @@ u32 compile(char *input)
         goto done;
     }
 
-    if (run_compiler_pass(&compiler, ast_root, typegen)) {
-        goto done;
-    }
-    if (run_compiler_pass(&compiler, ast_root, infer)) {
-        goto done;
-    }
-    if (run_compiler_pass(&compiler, ast_root, typecheck)) {
-        goto done;
-    }
-
     ast_print((AstNode *)ast_root, 0);
     putchar('\n');
 
-    transpile_to_c(&compiler);
+
+    // if (run_compiler_pass(&compiler, ast_root, typegen)) {
+    //     goto done;
+    // }
+    // if (run_compiler_pass(&compiler, ast_root, infer)) {
+    //     goto done;
+    // }
+    // if (run_compiler_pass(&compiler, ast_root, typecheck)) {
+    //     goto done;
+    // }
+
+    // transpile_to_c(&compiler);
 
 done:
     // We could be "good citizens" and release the memory here, but the OS is going to do it
