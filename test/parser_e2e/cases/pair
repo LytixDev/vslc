@@ -1,0 +1,22 @@
+--- GIVEN ---
+struct Pair := a: s32, b: f32
+
+func main(): s32
+begin
+    var pair: Pair
+    pair := Pair(10, 20)
+end
+--- EXPECT ---
+AST_ROOT
+ AST_LIST
+  AST_FUNC name=main parameters=
+   STMT_BLOCK vars=pair: Pair
+    AST_LIST
+     STMT_ASSIGNMENT
+      EXPR_LITERAL pair
+      EXPR_CALL Pair
+       AST_LIST
+        EXPR_LITERAL 10
+        EXPR_LITERAL 20
+ AST_LIST
+  AST_STRUCT name=Pair members=a: s32, b: f32

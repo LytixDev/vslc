@@ -62,6 +62,7 @@ typedef enum {
     TOKEN_COMMA,
     TOKEN_AMPERSAND, // &
     TOKEN_CARET, // ^
+    TOKEN_AT, // @
     TOKEN_EOF,
 
     // Identifier and reserved words
@@ -82,6 +83,7 @@ typedef enum {
     TOKEN_DO,
     TOKEN_VAR,
     TOKEN_NULL,
+    TOKEN_COMPILER,
 
     TOKEN_TYPE_ENUM_COUNT,
 } TokenKind;

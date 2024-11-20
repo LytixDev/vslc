@@ -384,7 +384,9 @@ static void bind_function(Compiler *c, AstFunc *func)
         symt_new_sym(c, &func_sym->symt_local, SYMBOL_PARAM, param.name, param_t, (AstNode *)func);
     }
 
-    bind_stmt(c, &func_sym->symt_local, func->body);
+    if (func->body != NULL) {
+        bind_stmt(c, &func_sym->symt_local, func->body);
+    }
 }
 
 static TypeInfo *typecheck_expr(Compiler *c, SymbolTable *symt_local, AstExpr *head)
@@ -875,7 +877,10 @@ void typecheck(Compiler *c, AstRoot *root)
         AstFunc *func = AS_FUNC(node->this);
         Symbol *func_sym = symt_find_sym(&c->symt_root, func->name);
         assert(func_sym != NULL && "Could not find symbol for function in bind_and_check!?!?");
-        typecheck_stmt(c, &func_sym->symt_local, (TypeInfoFunc *)func_sym->type_info, func->body);
+        if (func->body != NULL) {
+            typecheck_stmt(c, &func_sym->symt_local, (TypeInfoFunc *)func_sym->type_info,
+                           func->body);
+        }
     }
     /*
     // symt_print(compiler->symt_root);
