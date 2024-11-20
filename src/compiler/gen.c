@@ -307,7 +307,6 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
             str_builder_append_u8(&sb, '%');
             str_builder_append_u8(&sb, type_info_to_printf_format(((AstExpr *)node->this)->type));
             if (node->next != NULL) {
-                str_builder_append_u8(&sb, ',');
                 str_builder_append_u8(&sb, ' ');
             }
         }
