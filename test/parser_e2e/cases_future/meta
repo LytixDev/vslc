@@ -1,31 +1,54 @@
-import "ast" // Gives access to ast.c and ast.h
-// @import("ast")
+// 
+// Compiler declarations start
+//
 
-func PrintFunc(node: ast.Node): ast.Node
+struct Token := kind: s32 
+struct AstLiteral := kind: s32
+
+compiler func make_literal(token: Token): ^AstLiteral
+
+//
+// Compiler declarations end
+//
+
+
+func LogEveryCall(node: ^AstNode): ^AstNode
 begin
-    if node.type != ast.Func
-        return node
+    var func_node: ^AstFunc, func_name: Str8, func_body: ^AstStmt 
+    var print_expr: ^AstExpr, print_node: ^AstPrint
+    if node.kind != AstNodeKind.AST_FUNC then return node
 
-    func_node: ast.Func = ast.as_func(node)
-    func_name  := func_node.name
-    func_stmts := func_node.stms
+    // func_node := node as ^AstFunc // cast
+    func_name := func_node.name
+    func_body := func_node.stms
     
-    // TODO: instead, the expr could be "Calling `func_name`"
-    print_expr: ast.Expr  = ast.make_literal(func_name.token)
-    print_node: ast.Print = ast.make_single(ast.STMT_PRINT, print_expr)
+    // The print could be something like:
+    // Calling func_name with a = x, b = y, c = z.
+    print_expr := make_literal(func_name.token)
+    print_node := make_single(AstNodeKind.STMT_PRINT, print_expr)
 
-    func_node.stmts = ast.list_prepend(func_stmts, print_node)
-    return ast.as_node(func_node)
+    func_node.stmts := ast_list_push_back(func_stmts, print_node)
+    return node
 end
 
 
-@PrintFunc
-func add(a: int, b: int): int
+@LogEveryCall()
+func add(a: s32, b: s32): s32
 begin
     return a + b
 end
 
-func main() 
+
+@LogEveryCall()
+func sub(a: s32, b: s32): s32
+begin
+    return a - b
+end
+
+
+func main(): s32
 begin
     add(40, 2)
+    sub(44, 2)
+    return 0
 end

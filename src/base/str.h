@@ -75,9 +75,9 @@ typedef Str8 Str8View;
 u32 str_view_to_u32(Str8View view, bool *success);
 
 Str8Builder make_str_builder(Arena *arena);
-// void str_builder_append_str8(StrBuilder *sb, Str8 str);
 void str_builder_append_u8(Str8Builder *sb, u8 c);
 void str_builder_append_cstr(Str8Builder *sb, char *cstr, u32 len);
+void str_builder_append_str8(Str8Builder *sb, Str8 str);
 void str_builder_sprintf(Str8Builder *sb, char *fmt, int count, ...);
 Str8 str_builder_end(Str8Builder *sb, bool add_null_terminator);
 

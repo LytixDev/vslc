@@ -32,4 +32,24 @@ typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
 
+#define U8_MIN 0u
+#define U8_MAX 0xffu
+#define I8_MIN (-0x7f - 1)
+#define I8_MAX 0x7f
+
+#define U16_MIN 0u
+#define U16_MAX 0xffffu
+#define I16_MIN (-0x7fff - 1)
+#define I16_MAX 0x7fff
+
+#define U32_MIN 0u
+#define U32_MAX 0xffffffffu
+#define I32_MIN (-0x7fffffff - 1)
+#define I32_MAX 0x7fffffff
+
+#define U64_MIN 0ull
+#define U64_MAX 0xffffffffffffffffull
+#define I64_MIN (-0x7fffffffffffffffll - 1)
+#define I64_MAX 0x7fffffffffffffffll
+
 #endif /* TYPES_H */

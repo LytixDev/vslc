@@ -63,6 +63,7 @@ typedef struct {
 typedef struct {
     TypeInfo info;
     u32 struct_id; // Useful for graph algorithms
+    u32 bit_size;
     u32 members_len;
     TypeInfoStructMember **members;
 } TypeInfoStruct;
