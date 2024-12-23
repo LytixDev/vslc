@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h> // why the hell is memset here
 
+#include "base/str.h"
 #include "nag.h"
 
 typedef NAG_Order (*GraphTraverse)(NAG_Graph *graph, NAG_Idx start_node, u8 *visited);
@@ -269,19 +270,28 @@ static NAG_Order nag_toposort_from_internal(NAG_Graph *graph, NAG_Idx start_node
     return (NAG_Order){ .n_nodes = ordered_len, .nodes = ordered };
 }
 
-NAG_OrderList nag_rev_toposort(NAG_Graph *graph)
+NAG_Order nag_rev_toposort(NAG_Graph *graph)
 {
-    return nag_traverse_all(graph, nag_toposort_from_internal);
-}
+    NAG_OrderList all = nag_traverse_all(graph, nag_toposort_from_internal);
+    bool *included = m_arena_alloc(graph->scratch_arena, sizeof(NAG_Idx) * graph->n_nodes);
+    memset(included, 0, sizeof(NAG_Idx) * graph->n_nodes);
 
-static inline bool node_on_stack(NAG_Idx *stack, u32 stack_top, NAG_Idx node)
-{
-    for (u32 i = stack_top; i > 0; i--) {
-        if (stack[i] == node) {
-            return true;
+    NAG_Order final;
+    final.n_nodes = 0;
+    final.nodes = m_arena_alloc(graph->persist_arena, sizeof(NAG_Idx) * graph->n_nodes);
+
+    for (u32 i = 0; i < all.n; i++) {
+        NAG_Order current = all.orders[i];
+        for (u32 j = 0; j < current.n_nodes; j++) {
+            NAG_Idx current_idx = current.nodes[j];
+            if (!included[current_idx]) {
+                included[current_idx] = true;
+                final.nodes[final.n_nodes++] = current_idx;
+            }
         }
     }
-    return false;
+
+    return final;
 }
 
 typedef struct {

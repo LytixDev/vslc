@@ -1,7 +1,15 @@
+// 
 // Compiler declarations start
+//
 
+struct Token := kind: s32 
+struct AstLiteral := kind: s32
 
+compiler func make_literal(token: Token): ^AstLiteral
+
+//
 // Compiler declarations end
+//
 
 
 func LogEveryCall(node: ^AstNode): ^AstNode

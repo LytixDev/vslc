@@ -87,7 +87,7 @@ static Str8 type_info_to_c_type_name(Compiler *compiler, TypeInfo *t)
             str_builder_append_u8(&sb, '*');
         }
     }
-    return str_builder_end(&sb, false);
+    return str_builder_end(&sb, true);
 }
 
 static u8 type_info_to_printf_format(TypeInfo *t)
@@ -310,7 +310,7 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
                 str_builder_append_u8(&sb, ' ');
             }
         }
-        Str8 fmt = str_builder_end(&sb, false);
+        Str8 fmt = str_builder_end(&sb, true);
 
         fprintf(f, "printf(\"%s\\n\", ", fmt.str);
 
@@ -435,13 +435,10 @@ void transpile_to_c(Compiler *compiler)
     fprintf(f, "\n");
 
     /* Generate structs */
-    for (u32 i = 0; i < symt_root->sym_len; i++) {
-        Symbol *sym = symt_root->symbols[i];
-        if (sym->kind == SYMBOL_TYPE) {
-            if (sym->type_info->kind == TYPE_STRUCT) {
-                gen_struct(compiler, sym);
-            }
-        }
+    for (u32 i = 0; i < compiler->struct_types.size; i++) {
+        TypeInfoStruct *type_info = *(TypeInfoStruct **)arraylist_get(&compiler->struct_types, i);
+        Symbol *sym = symt_find_sym(&compiler->symt_root, type_info->info.generated_by);
+        gen_struct(compiler, sym);
     }
 
     fprintf(f, "\n");

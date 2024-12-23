@@ -80,6 +80,28 @@ static bool type_info_equal(TypeInfo *a, TypeInfo *b)
     return STR8VIEW_EQUAL(a->generated_by, b->generated_by);
 }
 
+static u32 type_info_bit_size(TypeInfo *type_info)
+{
+    switch (type_info->kind) {
+    case TYPE_ARRAY: {
+        TypeInfoArray *array_info = (TypeInfoArray *)type_info;
+        return array_info->elements * type_info_bit_size(array_info->element_type);
+    }
+    case TYPE_INTEGER:
+        return ((TypeInfoInteger *)type_info)->bit_size;
+    case TYPE_STRUCT:
+        return ((TypeInfoStruct *)type_info)->bit_size;
+    case TYPE_ENUM:
+    case TYPE_BOOL:
+        return 4;
+    case TYPE_POINTER:
+    case TYPE_FUNC:
+        return 8;
+    default:
+        assert(false && "type_info_bit_size not implemented");
+    }
+}
+
 static SymbolTable symt_init(SymbolTable *parent)
 {
     SymbolTable symt = { .sym_len = 0, .sym_cap = 16, .parent = parent };
@@ -766,9 +788,36 @@ void typegen(Compiler *c, AstRoot *root)
         Str8 error_msg = str_builder_end(&sb, true);
         error_msg_str8(c->e, error_msg);
     }
+    free(sccs.orders);
+
+    /*
+     * Reversed topological sort over the custom types so we know what order to generate structs and
+     * infer struct sizes.
+     * NOTE: Actually, Trajan's algorithm used in nag_scc does topological sorting as a by-product,
+     *       so using that would save some compute.
+     */
+    NAG_Order rev_toposort = nag_rev_toposort(&graph);
+    ArrayList structs_sorted;
+    arraylist_init(&structs_sorted, sizeof(TypeInfoStruct *));
+    for (u32 i = 0; i < rev_toposort.n_nodes; i++) {
+        TypeInfoStruct **s = arraylist_get(&c->struct_types, rev_toposort.nodes[i]);
+        arraylist_append(&structs_sorted, s);
+    }
+    arraylist_free(&c->struct_types);
+    c->struct_types = structs_sorted;
+
+    /* Calculate the size of each struct */
+    for (u32 i = 0; i < c->struct_types.size; i++) {
+        TypeInfoStruct *s = *(TypeInfoStruct **)arraylist_get(&c->struct_types, i);
+        s->bit_size = 0;
+        for (u32 j = 0; j < s->members_len; j++) {
+            TypeInfoStructMember *member = s->members[j];
+            member->offset = s->bit_size; // TODO: align?
+            s->bit_size += type_info_bit_size(member->type);
+        }
+    }
 
     m_arena_tmp_release(persist_arena_tmp);
-    free(sccs.orders);
 }
 
 void infer(Compiler *c, AstRoot *root)

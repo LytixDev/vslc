@@ -142,7 +142,7 @@ Str8 str_builder_end(Str8Builder *sb, bool add_null_terminator)
         str_builder_append_u8(sb, 0);
     }
     Str8 final = sb->str;
-    assert(final.str[final.len] == 0);
+    assert(final.str[final.len - 1] == 0);
     assert(final.len != 0);
     final.len -= 1;
     return final;

@@ -74,7 +74,7 @@ NAG_OrderList nag_bfs(NAG_Graph *graph);
 NAG_Order nag_bfs_from(NAG_Graph *graph, NAG_Idx start_node);
 
 /* Assumes graph contains no cycles */
-NAG_OrderList nag_rev_toposort(NAG_Graph *graph);
+NAG_Order nag_rev_toposort(NAG_Graph *graph);
 
 NAG_OrderList nag_scc(NAG_Graph *graph);
 
