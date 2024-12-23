@@ -14,22 +14,15 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include <assert.h>
-#include <stdio.h>
+#include "compiler/interpret.h"
 #include "base/types.h"
 #include "compiler/ast.h"
-#include "compiler/interpret.h"
+#include <assert.h>
+#include <stdio.h>
 
 char *op_code_str_map[OP_TYPE_LEN] = {
-    "OP_CONSTANT",
-    "OP_PLUS",
-    "OP_MINUS",
-    "OP_STAR",
-    "OP_SLASH",
-    "OP_LSHIFT",
-    "OP_RSHIFT",
-    "OP_PRINT",
-    "OP_RETURN",
+    "OP_CONSTANT", "OP_PLUS",   "OP_MINUS", "OP_STAR",   "OP_SLASH",
+    "OP_LSHIFT",   "OP_RSHIFT", "OP_PRINT", "OP_RETURN",
 };
 
 static BytecodeValue read_constant(MetagenVM *vm);
@@ -40,18 +33,18 @@ static void disassemble_instruction(Bytecode *b)
     printf("%04d %s", b->code_offset, op_code_str_map[instruction]);
     b->code_offset++;
     switch (instruction) {
-        case OP_PRINT: {
-            u8 n_args = b->code[b->code_offset];
-            b->code_offset++;
-            printf(" number of args %d", n_args);
-        }; break;
-        case OP_CONSTANT: {
-            BytecodeValue value = b->code[b->code_offset];
-            b->code_offset += sizeof(BytecodeValue);
-            printf(" %d", value);
-        }; break;
-        default:
-            break;
+    case OP_PRINT: {
+        u8 n_args = b->code[b->code_offset];
+        b->code_offset++;
+        printf(" number of args %d", n_args);
+    }; break;
+    case OP_CONSTANT: {
+        BytecodeValue value = b->code[b->code_offset];
+        b->code_offset += sizeof(BytecodeValue);
+        printf(" %d", value);
+    }; break;
+    default:
+        break;
     }
 }
 
@@ -66,7 +59,6 @@ static void disassemble(Bytecode *b)
     }
     b->code_offset = code_offset_end;
 }
-
 
 
 /* code */
@@ -111,7 +103,7 @@ static BytecodeValue stack_pop(MetagenVM *vm)
 
 static Bytecode test(void)
 {
-    Bytecode b = {0};
+    Bytecode b = { 0 };
 
     write_u8(&b, OP_CONSTANT);
     write_constant(&b, 3);
@@ -132,7 +124,9 @@ static Bytecode test(void)
 void ast_expr_to_bytecode(Bytecode *b, AstExpr *head)
 {
     switch (head->kind) {
-    default: printf("Ast stmt not handled\n"); break;
+    default:
+        printf("Ast stmt not handled\n");
+        break;
     case EXPR_LITERAL: {
         AstLiteral *expr = AS_LITERAL(head);
         assert(expr->lit_type == LIT_NUM);
@@ -146,7 +140,9 @@ void ast_expr_to_bytecode(Bytecode *b, AstExpr *head)
 void ast_stmt_to_bytecode(Bytecode *b, AstStmt *head)
 {
     switch (head->kind) {
-    default: printf("Ast stmt not handled\n"); break;
+    default:
+        printf("Ast stmt not handled\n");
+        break;
     case STMT_PRINT: {
         AstList *stmt = AS_LIST(head);
         u8 n_args = 0;
@@ -163,7 +159,7 @@ void ast_stmt_to_bytecode(Bytecode *b, AstStmt *head)
 
 Bytecode ast_func_to_bytecode(AstFunc *func)
 {
-    Bytecode b = {0};
+    Bytecode b = { 0 };
     // NOTE: right now we only compile the body
     assert(func->body != NULL);
     ast_stmt_to_bytecode(&b, func->body);
@@ -181,7 +177,7 @@ Bytecode ast_to_bytecode(AstRoot *root)
 
 u32 run_bytecode(Bytecode b)
 {
-    //b = test();
+    // b = test();
     MetagenVM vm = { .b = b, .ip = b.code };
     vm.sp = (u8 *)vm.stack;
 
@@ -236,7 +232,7 @@ u32 run_bytecode(Bytecode b)
     }
 
 vm_loop_done:
-    //final = stack_pop(&vm);
-    //printf("%d\n", final);
+    // final = stack_pop(&vm);
+    // printf("%d\n", final);
     return 0;
 }

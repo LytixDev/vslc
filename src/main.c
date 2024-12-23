@@ -20,9 +20,9 @@
 #include "compiler/compiler.h"
 #include "compiler/error.h"
 #include "compiler/gen.h"
+#include "compiler/interpret.h"
 #include "compiler/parser.h"
 #include "compiler/type.h"
-#include "compiler/interpret.h"
 
 #include "base/str.h"
 #define NICC_IMPLEMENTATION
@@ -70,7 +70,6 @@ u32 compile(char *input)
     ast_print((AstNode *)ast_root, 0);
     putchar('\n');
 
-
     if (run_compiler_pass(&compiler, ast_root, typegen)) {
         goto done;
     }
@@ -92,11 +91,10 @@ done:
     }
     // We could be "good citizens" and release the memory here, but the OS is going to do it
     // anyways on the process terminating, so it doesn't really make a difference.
-
     // arraylist_free ...
-    // error_handler_release(&e);
-    // m_arena_release(&arena);
-    // m_arena_release(&lex_arena);
+    error_handler_release(&e);
+    m_arena_release(&arena);
+    m_arena_release(&lex_arena);
     return e.n_errors;
 }
 

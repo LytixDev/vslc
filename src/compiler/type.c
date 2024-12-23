@@ -22,6 +22,7 @@
 #include "base/str.h"
 #include "compiler.h"
 #include "error.h"
+#include "nag.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -586,59 +587,12 @@ static void symt_print(SymbolTable symt)
     }
 }
 
-/* --- Graph --- */
-typedef struct graph_node_t GraphNode;
-struct graph_node_t {
-    u32 id;
-    GraphNode *next;
-};
-
-typedef struct {
-    u32 n_nodes;
-    GraphNode **neighbor_list;
-} Graph;
-
-
-static Graph make_graph(Arena *arena, u32 n_nodes)
+static void graph_add_edges_from_struct_type(Arena *pass_arena, NAG_Graph *graph, TypeInfoStruct *t)
 {
-    Graph graph = { .n_nodes = n_nodes,
-                    .neighbor_list = m_arena_alloc(arena, sizeof(GraphNode *) * n_nodes) };
+    NAG_Idx *added_list = m_arena_alloc_zero(pass_arena, sizeof(NAG_Idx) * t->members_len);
+    NAG_Idx added_count = 0;
 
-    memset(graph.neighbor_list, 0, sizeof(GraphNode) * graph.n_nodes);
-    return graph;
-}
-
-/*
-static void graph_print(Graph *graph)
-{
-    for (u32 i = 0; i < graph->n_nodes; i++) {
-        printf("[%d] -> ", i);
-        GraphNode *node = graph->neighbor_list[i];
-        while (node != NULL) {
-            printf("%d, ", node->id);
-            node = node->next;
-        }
-        putchar('\n');
-    }
-}
-*/
-
-static void graph_add_edge(Arena *arena, Graph *graph, u32 from, u32 to)
-{
-    assert(from <= graph->n_nodes);
-    GraphNode *first = graph->neighbor_list[from];
-    GraphNode *new_node = m_arena_alloc(arena, sizeof(GraphNode));
-    new_node->id = to;
-    new_node->next = first;
-    graph->neighbor_list[from] = new_node;
-}
-
-static void graph_add_edges_from_struct_type(Arena *arena, Graph *graph, TypeInfoStruct *t)
-{
-    u32 *added_list = m_arena_alloc_zero(arena, sizeof(u32) * t->members_len);
-    u32 added_count = 0;
-
-    for (u32 i = 0; i < t->members_len; i++) {
+    for (NAG_Idx i = 0; i < t->members_len; i++) {
         TypeInfoStructMember *m = t->members[i];
         TypeInfoStruct *member_type;
         /* Only care about arrays were the underlying type is a struct */
@@ -654,80 +608,22 @@ static void graph_add_edges_from_struct_type(Arena *arena, Graph *graph, TypeInf
             continue;
         }
 
-        u32 from = t->struct_id;
-        u32 to = member_type->struct_id;
+        NAG_Idx from = t->struct_id;
+        NAG_Idx to = member_type->struct_id;
 
         /* Do not add duplicate edges */
         bool duplicate = false;
-        for (u32 j = 0; j < added_count; j++) {
+        for (NAG_Idx j = 0; j < added_count; j++) {
             if (added_list[j] == to) {
                 duplicate = true;
                 break;
             }
         }
         if (!duplicate) {
-            graph_add_edge(arena, graph, from, to);
+            nag_add_edge(graph, from, to);
             added_list[added_count++] = to;
         }
     }
-}
-
-static bool find_cycles(Compiler *c, Graph *graph)
-{
-    // TODO: Trajan's algorithm would be better
-    // TODO: return what caused the cycle so we can create an error message
-
-    /* DFS-based cycle detector */
-    u32 *visited = m_arena_alloc(c->pass_arena, sizeof(u32) * graph->n_nodes);
-    memset(visited, false, sizeof(u32) * graph->n_nodes);
-    u32 stack[1024]; // TODO: not-fixed width
-    u32 recursion_stack[1024]; // TODO: not-fixed width
-
-
-    for (u32 start_node = 0; start_node < graph->n_nodes; start_node++) {
-        if (visited[start_node]) {
-            continue;
-        }
-
-        stack[0] = start_node;
-        u32 stack_len = 1;
-        u32 recursion_idx = 0;
-
-        while (stack_len != 0) {
-            u32 current_node = stack[--stack_len];
-            /* if node in recursion_stack then we have a cycle */
-            for (u32 i = 0; i < recursion_idx; i++) {
-                if (recursion_stack[i] == current_node) {
-                    // TODO: We can backtrace the steps to give a really good error message, but
-                    //       right now I just do the bare minimum.
-                    Str8Builder sb = make_str_builder(&c->e->arena);
-                    str_builder_sprintf(&sb, "A type cycle detected in struct with id %d", 1,
-                                        (int)current_node);
-                    Str8 msg = str_builder_end(&sb, false);
-                    error_msg_str8(c->e, msg);
-                    return true;
-                }
-            }
-
-            if (visited[current_node]) {
-                /* if node is visited, pop it from recursion_stack (backtrack) */
-                if (recursion_idx > 0 && recursion_stack[recursion_idx - 1] == current_node) {
-                    recursion_idx--;
-                }
-                continue;
-            }
-
-            /* mark node as visited and add it to recursion_stack */
-            visited[current_node] = true;
-            recursion_stack[recursion_idx++] = current_node;
-
-            for (GraphNode *n = graph->neighbor_list[current_node]; n != NULL; n = n->next) {
-                stack[stack_len++] = n->id;
-            }
-        }
-    }
-
-    return false;
 }
 
 static void add_builtin_integral_type(Compiler *c, bool is_signed, u32 bit_size)
@@ -845,12 +741,34 @@ void typegen(Compiler *c, AstRoot *root)
     }
 
     /* Check for cirular type dependencies */
-    Graph graph = make_graph(c->pass_arena, (u32)c->struct_types.size);
-    for (u32 i = 0; i < c->struct_types.size; i++) {
+    ArenaTmp persist_arena_tmp = m_arena_tmp_init(c->persist_arena);
+
+    NAG_Graph graph =
+        nag_make_graph(c->persist_arena, c->pass_arena, (NAG_Idx)c->struct_types.size);
+    for (NAG_Idx i = 0; i < (NAG_Idx)c->struct_types.size; i++) {
         TypeInfoStruct **t = arraylist_get(&c->struct_types, i);
         graph_add_edges_from_struct_type(c->pass_arena, &graph, *t);
     }
-    find_cycles(c, &graph);
+
+    NAG_OrderList sccs = nag_scc(&graph);
+    /*
+     * Give appropritate error message for strongly connected component found
+     * NOTE: nag_scc() only return sccs > 1, which is the behavior we want.
+     */
+    for (u32 i = 0; i < sccs.n; i++) {
+        NAG_Order scc = sccs.orders[i];
+        Str8Builder sb = make_str_builder(&c->e->arena);
+        str_builder_append_str8(&sb, STR8_LIT("Circular dependency between structs: "));
+        str_builder_sprintf(&sb, "%d", 1, scc.nodes[0]);
+        for (u32 j = 0; j < scc.n_nodes; j++) {
+            str_builder_sprintf(&sb, " <- %d", 1, scc.nodes[j]);
+        }
+        Str8 error_msg = str_builder_end(&sb, true);
+        error_msg_str8(c->e, error_msg);
+    }
+
+    m_arena_tmp_release(persist_arena_tmp);
+    free(sccs.orders);
 }
 
 void infer(Compiler *c, AstRoot *root)

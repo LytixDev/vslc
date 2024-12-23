@@ -89,6 +89,12 @@ void str_builder_append_cstr(Str8Builder *sb, char *cstr, u32 len)
     sb->str.len += len;
 }
 
+
+void str_builder_append_str8(Str8Builder *sb, Str8 str)
+{
+    str_builder_append_cstr(sb, (char *)str.str, str.len);
+}
+
 void str_builder_sprintf(Str8Builder *sb, char *fmt, int count, ...)
 {
     va_list args;
