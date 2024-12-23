@@ -25,7 +25,7 @@ char *op_code_str_map[OP_TYPE_LEN] = {
     "OP_LSHIFT",   "OP_RSHIFT", "OP_PRINT", "OP_RETURN",
 };
 
-static BytecodeValue read_constant(MetagenVM *vm);
+static BytecodeWord read_word(MetagenVM *vm);
 
 static void disassemble_instruction(Bytecode *b)
 {
@@ -39,8 +39,8 @@ static void disassemble_instruction(Bytecode *b)
         printf(" number of args %d", n_args);
     }; break;
     case OP_CONSTANT: {
-        BytecodeValue value = b->code[b->code_offset];
-        b->code_offset += sizeof(BytecodeValue);
+        BytecodeWord value = b->code[b->code_offset];
+        b->code_offset += sizeof(BytecodeWord);
         printf(" %d", value);
     }; break;
     default:
@@ -68,16 +68,16 @@ static void write_u8(Bytecode *b, u8 byte)
     b->code_offset++;
 }
 
-static void write_constant(Bytecode *b, BytecodeValue v)
+static void write_word(Bytecode *b, BytecodeWord v)
 {
     b->code[b->code_offset] = v;
-    b->code_offset += sizeof(BytecodeValue);
+    b->code_offset += sizeof(BytecodeWord);
 }
 
-static BytecodeValue read_constant(MetagenVM *vm)
+static BytecodeWord read_word(MetagenVM *vm)
 {
-    BytecodeValue value = *vm->ip;
-    vm->ip += sizeof(BytecodeValue);
+    BytecodeWord value = *vm->ip;
+    vm->ip += sizeof(BytecodeWord);
     return value;
 }
 
@@ -89,15 +89,15 @@ static u8 read_u8(MetagenVM *vm)
 }
 
 /* stack */
-static void stack_push(MetagenVM *vm, BytecodeValue value)
+static void stack_push(MetagenVM *vm, BytecodeWord value)
 {
     *vm->sp = value;
-    vm->sp += sizeof(BytecodeValue);
+    vm->sp += sizeof(BytecodeWord);
 }
 
-static BytecodeValue stack_pop(MetagenVM *vm)
+static BytecodeWord stack_pop(MetagenVM *vm)
 {
-    vm->sp -= sizeof(BytecodeValue);
+    vm->sp -= sizeof(BytecodeWord);
     return *vm->sp;
 }
 
@@ -106,12 +106,12 @@ static Bytecode test(void)
     Bytecode b = { 0 };
 
     write_u8(&b, OP_CONSTANT);
-    write_constant(&b, 3);
+    write_word(&b, 3);
     write_u8(&b, OP_CONSTANT);
-    write_constant(&b, 2);
+    write_word(&b, 2);
     write_u8(&b, OP_PLUS);
     write_u8(&b, OP_CONSTANT);
-    write_constant(&b, 10);
+    write_word(&b, 10);
     write_u8(&b, OP_STAR);
     write_u8(&b, OP_PRINT);
     write_u8(&b, 1);
@@ -132,7 +132,7 @@ void ast_expr_to_bytecode(Bytecode *b, AstExpr *head)
         assert(expr->lit_type == LIT_NUM);
         u32 literal = str_view_to_u32(expr->literal, NULL);
         write_u8(b, OP_CONSTANT);
-        write_constant(b, literal);
+        write_word(b, literal);
     }; break;
     };
 }
@@ -183,13 +183,12 @@ u32 run_bytecode(Bytecode b)
 
     disassemble(&b);
 
-
     while (1) {
         // printf("%04ld\n", vm.ip - b.code);
         OpCode instruction;
         switch (instruction = *vm.ip++) {
         case OP_CONSTANT: {
-            BytecodeValue value = read_constant(&vm);
+            BytecodeWord value = read_word(&vm);
             stack_push(&vm, value);
         }; break;
 
@@ -215,9 +214,14 @@ u32 run_bytecode(Bytecode b)
 
         case OP_PRINT: {
             u8 n_args = read_u8(&vm);
+            /* Must first pop unto an array to maintain correct printing order */
+            BytecodeWord args[n_args];
             for (u8 i = 0; i < n_args; i++) {
-                BytecodeValue value = stack_pop(&vm);
-                printf("%d ", value);
+                BytecodeWord value = stack_pop(&vm);
+                args[i] = value;
+            }
+            for (u8 i = n_args; i > 0; i--) {
+                printf("%ld ", args[i - 1]);
             }
             printf("\n");
         }; break;

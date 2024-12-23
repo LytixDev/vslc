@@ -21,7 +21,7 @@
 #include "base/types.h"
 #include "compiler/ast.h"
 
-typedef s32 BytecodeValue;
+typedef s64 BytecodeWord;
 
 
 typedef enum {
@@ -58,7 +58,7 @@ typedef struct {
     Bytecode b;
     u8 *ip;
 
-    BytecodeValue stack[STACK_MAX];
+    BytecodeWord stack[STACK_MAX];
     u8 *sp;
 } MetagenVM;
 
