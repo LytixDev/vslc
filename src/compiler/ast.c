@@ -22,8 +22,8 @@
 
 char *node_kind_str_map[AST_NODE_TYPE_LEN] = {
     "EXPR_UNARY", "EXPR_BINARY", "EXPR_LITERAL",         "EXPR_CALL",   "STMT_WHILE",
-    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",        "STMT_RETURN", "STMT_PRINT",
-    "STMT_EXPR",  "STMT_BLOCK",  "STMT_ASSIGNMENT",      "AST_FUNC",    "AST_STRUCT",
+    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",        "STMT_RETURN", "STMT_EXPR",
+    "STMT_PRINT", "STMT_BLOCK",  "STMT_ASSIGNMENT",      "AST_FUNC",    "AST_STRUCT",
     "AST_ENUM",   "AST_LIST",    "AST_TYPED_IDENT_LIST", "AST_ROOT",
 };
 
@@ -252,7 +252,7 @@ static void ast_print_expr(AstExpr *head, u32 indent)
         AstLiteral *lit = AS_LITERAL(head);
         printf("%.*s", STR8VIEW_PRINT(lit->literal));
         if (lit->sym != NULL) {
-            printf(" (bound to %d)", lit->sym->seq_no);
+            printf(":%d", lit->sym->seq_no);
         }
     } break;
     case EXPR_CALL: {
@@ -310,6 +310,11 @@ void ast_print_stmt(AstStmt *head, u32 indent)
         AstBlock *stmt = AS_BLOCK(head);
         printf(" vars=");
         ast_print_typed_var_list(stmt->declarations);
+        printf(" syms=");
+        for (u32 i = 0; i < stmt->symt_local->sym_len; i++) {
+            Symbol *sym = stmt->symt_local->symbols[i];
+            printf("(%s, %d) ", sym->name.str, sym->seq_no);
+        }
         ast_print((AstNode *)stmt->stmts, indent + 1);
     }; break;
     case STMT_ASSIGNMENT: {
@@ -349,7 +354,7 @@ void ast_print(AstNode *head, u32 indent)
     }; break;
     case AST_FUNC: {
         AstFunc *func = AS_FUNC(head);
-        if (func->body != NULL) {
+        if (func->body == NULL) {
             printf("compiler internal ");
         }
         printf("name=%.*s", STR8VIEW_PRINT(func->name));

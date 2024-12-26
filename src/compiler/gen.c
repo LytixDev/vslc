@@ -325,7 +325,7 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
     case STMT_BLOCK: {
         AstBlock *stmt = AS_BLOCK(head);
 
-        write_newline_and_indent(indent);
+        // write_newline_and_indent(indent);
         fprintf(f, "{");
         indent += 2;
         write_newline_and_indent(indent);
@@ -340,7 +340,7 @@ static void gen_stmt(Compiler *compiler, AstStmt *head, u32 indent)
              * s32 x;
              */
             fprintf(f, "%s %s;", type_name.str, sym->name.str);
-            write_newline_and_indent(indent);
+            // write_newline_and_indent(indent);
         }
         /* Statement */
         for (AstListNode *node = stmt->stmts->head; node != NULL; node = node->next) {

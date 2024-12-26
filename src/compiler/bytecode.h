@@ -14,8 +14,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef INTERPRET_H
-#define INTERPRET_H
+#ifndef BYTECODE_H
+#define BYTECODE_H
 
 
 #include "base/types.h"
@@ -25,18 +25,17 @@ typedef s64 BytecodeWord;
 
 
 typedef enum {
-    OP_CONSTANT,
+    OP_CONSTANTW,
 
-    /* bin ops */
-    OP_PLUS,
-    OP_MINUS,
-    OP_STAR,
-    OP_SLASH,
+    /* arithmetic */
+    OP_ADDW,
+    OP_SUBW,
+    OP_MULW,
+    OP_DIVW,
     OP_LSHIFT,
     OP_RSHIFT,
 
     OP_PRINT,
-
     OP_RETURN,
 
     OP_TYPE_LEN,
@@ -60,10 +59,12 @@ typedef struct {
 
     BytecodeWord stack[STACK_MAX];
     u8 *sp;
+
+    BytecodeWord variables[256];
 } MetagenVM;
 
 
 Bytecode ast_to_bytecode(AstRoot *root);
-u32 run_bytecode(Bytecode b);
+u32 bytecode_run(Bytecode b);
 
-#endif /* INTERPRET_H */
+#endif /* BYTECODE_H */

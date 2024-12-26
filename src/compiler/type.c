@@ -142,7 +142,7 @@ static Symbol *symt_new_sym(Compiler *c, SymbolTable *symt, SymbolKind sym_kind,
     if (existing_sym != NULL) {
         error_sym(c->e, "Symbol already exists", name);
         /* Continue with the OG symbol, but stop compilation later */
-        return existing_sym; // Continu
+        return existing_sym; // Continue
     }
 
     /* Create the new symbol */
@@ -849,21 +849,5 @@ void typecheck(Compiler *c, AstRoot *root)
                            func->body);
         }
     }
-    /*
-    // symt_print(compiler->symt_root);
-    // Print symbols
-    for (u32 i = 0; i < compiler->symt_root.sym_len; i++) {
-        Symbol *sym = compiler->symt_root.symbols[i];
-        printf("%.*s", STR8VIEW_PRINT(sym->name));
-        if (sym->type_info == NULL) {
-            putchar('\n');
-            continue;
-        }
-        // Print type
-        // printf(" -> %d, is_resolved %d\n", sym->type_info->kind, sym->type_info->is_resolved);
-        printf("\t\t-> ");
-        type_info_print(sym->type_info);
-        putchar('\n');
-    }
-    */
+    // symt_print(c->symt_root);
 }

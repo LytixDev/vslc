@@ -17,10 +17,10 @@
 #include <stdio.h>
 
 #include "compiler/ast.h"
+#include "compiler/bytecode.h"
 #include "compiler/compiler.h"
 #include "compiler/error.h"
 #include "compiler/gen.h"
-#include "compiler/interpret.h"
 #include "compiler/parser.h"
 #include "compiler/type.h"
 
@@ -67,9 +67,6 @@ u32 compile(char *input)
         goto done;
     }
 
-    ast_print((AstNode *)ast_root, 0);
-    putchar('\n');
-
     if (run_compiler_pass(&compiler, ast_root, typegen)) {
         goto done;
     }
@@ -80,8 +77,11 @@ u32 compile(char *input)
         goto done;
     }
 
+    ast_print((AstNode *)ast_root, 0);
+    putchar('\n');
+
     Bytecode b = ast_to_bytecode(ast_root);
-    run_bytecode(b);
+    bytecode_run(b);
 
     transpile_to_c(&compiler);
 
