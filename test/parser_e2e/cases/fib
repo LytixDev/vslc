@@ -1,0 +1,16 @@
+func fib(n: s32): s32
+begin
+    if n = 0 then return 0
+    if n = 1 then return 1
+    return fib(n - 1) + fib(n - 2)
+end
+
+func main(): s32
+begin
+    var fib_20: s32
+
+    fib_20 := fib(20)
+    print fib_20
+
+    return 0
+end

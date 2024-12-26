@@ -17,9 +17,11 @@
 #include <stdio.h>
 
 #include "compiler/ast.h"
+#include "compiler/codegen/gen.h"
 #include "compiler/compiler.h"
+#include "compiler/comptime/bytecode.h"
+#include "compiler/comptime/vm.h"
 #include "compiler/error.h"
-#include "compiler/gen.h"
 #include "compiler/parser.h"
 #include "compiler/type.h"
 
@@ -79,16 +81,23 @@ u32 compile(char *input)
     ast_print((AstNode *)ast_root, 0);
     putchar('\n');
 
+    // Bytecode b = ast_to_bytecode(ast_root);
+    Bytecode bytecode = bytecode_test();
+    disassemble(bytecode);
+    run(bytecode);
+
     transpile_to_c(&compiler);
 
 done:
+    for (CompilerError *err = e.head; err != NULL; err = err->next) {
+        printf("%s\n", err->msg.str);
+    }
     // We could be "good citizens" and release the memory here, but the OS is going to do it
     // anyways on the process terminating, so it doesn't really make a difference.
-
     // arraylist_free ...
-    // error_handler_release(&e);
-    // m_arena_release(&arena);
-    // m_arena_release(&lex_arena);
+    error_handler_release(&e);
+    m_arena_release(&arena);
+    m_arena_release(&lex_arena);
     return e.n_errors;
 }
 
@@ -96,12 +105,12 @@ done:
 int main(void)
 {
     Arena input_arena;
-    m_arena_init_dynamic(&input_arena, 1, 32);
+    m_arena_init_dynamic(&input_arena, 1, 512);
     char *input = m_arena_alloc_zero(&input_arena, 4096);
     char c;
     u32 i = 0;
     while ((c = getchar()) != EOF) {
-        if (input_arena.offset >= input_arena.pages_commited * 4096) {
+        if (i >= input_arena.pages_commited * 4096) {
             m_arena_alloc_zero(&input_arena, 4096);
         }
         input[i] = c;

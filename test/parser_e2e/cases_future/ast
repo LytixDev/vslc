@@ -1,0 +1,23 @@
+enum TokenType := TOKEN_NUM = 0,
+                  TOKEN_STR
+
+struct Token := type: TokenType,
+                // ...
+
+// Ast enum headers
+enum AstExprType := EXPR_UNARY = 0,
+                    EXPR_BINARY,
+                    EXPR_LITERAL,
+                    EXPR_CALL,
+                    EXPR_TYPE_LEN
+
+
+// Ast type declarations
+struct AstExprUnary := type: AstExprType, 
+                       op: TokenType,
+                       expr: AstExpr
+                        
+// Ast function declarations
+
+@Extern
+func make_unary(AstExpr *expr, TokenType op): AstExprUnary

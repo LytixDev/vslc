@@ -89,6 +89,12 @@ void str_builder_append_cstr(Str8Builder *sb, char *cstr, u32 len)
     sb->str.len += len;
 }
 
+
+void str_builder_append_str8(Str8Builder *sb, Str8 str)
+{
+    str_builder_append_cstr(sb, (char *)str.str, str.len);
+}
+
 void str_builder_sprintf(Str8Builder *sb, char *fmt, int count, ...)
 {
     va_list args;
@@ -136,7 +142,7 @@ Str8 str_builder_end(Str8Builder *sb, bool add_null_terminator)
         str_builder_append_u8(sb, 0);
     }
     Str8 final = sb->str;
-    assert(final.str[final.len] == 0);
+    assert(final.str[final.len - 1] == 0);
     assert(final.len != 0);
     final.len -= 1;
     return final;

@@ -145,11 +145,11 @@ static bool m_arena_ensure_commited(struct m_arena *arena)
 
     /* know arena is dynamic */
     size_t memory_committed = arena->pages_commited * arena->page_size;
-    if (arena->offset <= memory_committed)
+    if (arena->offset < memory_committed)
         return true;
 
     // TODO: this math can probably be optimized
-    size_t delta = arena->offset - memory_committed;
+    size_t delta = arena->offset - memory_committed + 1;
     size_t pages_to_commit = (delta / arena->page_size) + 1;
     if (arena->pages_commited + pages_to_commit > arena->max_pages)
         return false;

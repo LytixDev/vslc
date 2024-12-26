@@ -22,8 +22,8 @@
 
 char *node_kind_str_map[AST_NODE_TYPE_LEN] = {
     "EXPR_UNARY", "EXPR_BINARY", "EXPR_LITERAL",         "EXPR_CALL",   "STMT_WHILE",
-    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",        "STMT_RETURN", "STMT_PRINT",
-    "STMT_EXPR",  "STMT_BLOCK",  "STMT_ASSIGNMENT",      "AST_FUNC",    "AST_STRUCT",
+    "STMT_IF",    "STMT_BREAK",  "STMT_CONTINUE",        "STMT_RETURN", "STMT_EXPR",
+    "STMT_PRINT", "STMT_BLOCK",  "STMT_ASSIGNMENT",      "AST_FUNC",    "AST_STRUCT",
     "AST_ENUM",   "AST_LIST",    "AST_TYPED_IDENT_LIST", "AST_ROOT",
 };
 
@@ -64,9 +64,10 @@ AstLiteral *make_literal(Arena *a, Token token)
     return literal;
 }
 
-AstCall *make_call(Arena *a, Str8View identifier, AstList *args)
+AstCall *make_call(Arena *a, bool is_comptime, Str8View identifier, AstList *args)
 {
     AstCall *call = m_arena_alloc(a, sizeof(AstCall));
+    call->is_comptime = is_comptime;
     call->kind = EXPR_CALL;
     call->identifier = identifier;
     call->args = args;
@@ -186,7 +187,8 @@ AstTypedIdentList *make_typed_ident_list(Arena *a, TypedIdentList vars)
     return node_var_list;
 }
 
-AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums)
+AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums,
+                   AstList calls)
 {
     AstRoot *root = m_arena_alloc(a, sizeof(AstRoot));
     root->kind = AST_ROOT;
@@ -194,6 +196,7 @@ AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstLi
     root->funcs = funcs;
     root->structs = structs;
     root->enums = enums;
+    root->calls = calls;
     return root;
 }
 
@@ -249,11 +252,14 @@ static void ast_print_expr(AstExpr *head, u32 indent)
         AstLiteral *lit = AS_LITERAL(head);
         printf("%.*s", STR8VIEW_PRINT(lit->literal));
         if (lit->sym != NULL) {
-            printf(" (bound to %d)", lit->sym->seq_no);
+            printf(":%d", lit->sym->seq_no);
         }
     } break;
     case EXPR_CALL: {
         AstCall *call = AS_CALL(head);
+        if (call->is_comptime) {
+            printf("@");
+        }
         printf("%.*s", STR8VIEW_PRINT(call->identifier));
         if (call->args) {
             ast_print((AstNode *)call->args, indent + 1);
@@ -304,6 +310,11 @@ void ast_print_stmt(AstStmt *head, u32 indent)
         AstBlock *stmt = AS_BLOCK(head);
         printf(" vars=");
         ast_print_typed_var_list(stmt->declarations);
+        printf(" syms=");
+        for (u32 i = 0; i < stmt->symt_local->sym_len; i++) {
+            Symbol *sym = stmt->symt_local->symbols[i];
+            printf("(%s, %d) ", sym->name.str, sym->seq_no);
+        }
         ast_print((AstNode *)stmt->stmts, indent + 1);
     }; break;
     case STMT_ASSIGNMENT: {
@@ -318,10 +329,11 @@ void ast_print_stmt(AstStmt *head, u32 indent)
 
 void ast_print(AstNode *head, u32 indent)
 {
-    if ((u32)head->kind < (u32)EXPR_TYPE_LEN) {
+    if (AST_IS_EXPR(head)) {
         ast_print_expr((AstExpr *)head, indent);
         return;
-    } else if ((u32)head->kind < (u32)STMT_TYPE_LEN) {
+    }
+    if (AST_IS_STMT(head)) {
         ast_print_stmt((AstStmt *)head, indent);
         return;
     }
@@ -338,13 +350,19 @@ void ast_print(AstNode *head, u32 indent)
         ast_print((AstNode *)(&root->funcs), indent + 1);
         ast_print((AstNode *)(&root->structs), indent + 1);
         ast_print((AstNode *)(&root->enums), indent + 1);
+        ast_print((AstNode *)(&root->calls), indent + 1);
     }; break;
     case AST_FUNC: {
         AstFunc *func = AS_FUNC(head);
+        if (func->body == NULL) {
+            printf("compiler internal ");
+        }
         printf("name=%.*s", STR8VIEW_PRINT(func->name));
         printf(" parameters=");
         ast_print_typed_var_list(func->parameters);
-        ast_print_stmt(func->body, indent + 1);
+        if (func->body != NULL) {
+            ast_print_stmt(func->body, indent + 1);
+        }
     }; break;
     case AST_STRUCT: {
         AstStruct *struct_decl = AS_STRUCT(head);

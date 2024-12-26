@@ -17,6 +17,7 @@
 #ifndef AST_H
 #define AST_H
 
+#include "base/base.h"
 #include "base/types.h"
 #include "lex.h"
 
@@ -141,6 +142,7 @@ typedef struct {
 
 typedef struct {
     AstExprKind kind;
+    bool is_comptime;
     TypeInfo *type; // @NULLABLE. Only set after typechecking.
     Str8 identifier;
     AstList *args; // @NULLABLE.
@@ -204,7 +206,7 @@ typedef struct {
     Str8 name;
     TypedIdentList parameters;
     AstTypeInfo return_type;
-    AstStmt *body;
+    AstStmt *body; // @NULLABLE. If NULL then the function is a compiler intrinsic.
 } AstFunc;
 
 typedef struct {
@@ -225,8 +227,14 @@ typedef struct {
     AstList funcs; // AstFunc
     AstList structs; // AstStruct
     AstList enums; // AstEnum
+    AstList calls; // AstCall - Compile time calls
 } AstRoot;
 
+
+#define AST_IS_EXPR(___node) \
+    (IS_BETWEEN((___node)->kind, (AstNodeKind)EXPR_UNARY, (AstNodeKind)EXPR_TYPE_LEN - 1))
+#define AST_IS_STMT(___node) \
+    (IS_BETWEEN((___node)->kind, (AstNodeKind)STMT_WHILE, (AstNodeKind)STMT_TYPE_LEN - 1))
 
 #define AS_UNARY(___expr) ((AstUnary *)(___expr))
 #define AS_BINARY(___expr) ((AstBinary *)(___expr))
@@ -253,7 +261,7 @@ extern char *node_kind_str_map[AST_NODE_TYPE_LEN];
 AstUnary *make_unary(Arena *a, AstExpr *expr, TokenKind op);
 AstBinary *make_binary(Arena *a, AstExpr *left, TokenKind op, AstExpr *right);
 AstLiteral *make_literal(Arena *a, Token token);
-AstCall *make_call(Arena *a, Str8View identifier, AstList *args);
+AstCall *make_call(Arena *a, bool is_comptime_call, Str8View identifier, AstList *args);
 
 /* Statements */
 AstWhile *make_while(Arena *a, AstExpr *condition, AstStmt *body);
@@ -271,7 +279,8 @@ AstListNode *make_list_node(Arena *a, AstNode *this);
 void ast_list_push_back(AstList *list, AstListNode *node);
 AstList *make_list(Arena *a, AstNode *head);
 AstTypedIdentList *make_typed_ident_list(Arena *a, TypedIdentList vars);
-AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums);
+AstRoot *make_root(Arena *a, AstList vars, AstList funcs, AstList structs, AstList enums,
+                   AstList calls);
 
 void ast_print(AstNode *head, u32 indent);
 
