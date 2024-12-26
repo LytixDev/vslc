@@ -14,12 +14,25 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef GEN_H
-#define GEN_H
+#ifndef VM_H
+#define VM_H
 
-#include "compiler.h"
-#include "type.h"
 
-void transpile_to_c(Compiler *compiler);
+#include "base/types.h"
+#include "compiler/comptime/bytecode.h"
 
-#endif /* TYPE_H */
+#define STACK_MAX 1024
+
+typedef struct {
+    Bytecode b;
+    u8 *ip;
+
+    BytecodeWord stack[STACK_MAX];
+    u8 *sp;
+    u8 bp;
+} MetagenVM;
+
+
+u32 run(Bytecode b);
+
+#endif /* VM_H */

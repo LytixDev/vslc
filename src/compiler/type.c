@@ -17,12 +17,12 @@
 #include "type.h"
 #include "ast.h"
 #include "base/base.h"
+#include "base/nag.h"
 #include "base/nicc.h"
 #include "base/sac_single.h"
 #include "base/str.h"
 #include "compiler.h"
 #include "error.h"
-#include "nag.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -80,7 +80,8 @@ static bool type_info_equal(TypeInfo *a, TypeInfo *b)
     return STR8VIEW_EQUAL(a->generated_by, b->generated_by);
 }
 
-static u32 type_info_bit_size(TypeInfo *type_info)
+// TODO: we could move this into the generic TypeInfo struct
+u32 type_info_bit_size(TypeInfo *type_info)
 {
     switch (type_info->kind) {
     case TYPE_ARRAY: {

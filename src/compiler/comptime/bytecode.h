@@ -22,7 +22,7 @@
 #include "compiler/ast.h"
 
 typedef s64 BytecodeWord;
-
+typedef u16 BytecodeImm;
 
 typedef enum {
     OP_CONSTANTW,
@@ -35,6 +35,12 @@ typedef enum {
     OP_LSHIFT,
     OP_RSHIFT,
 
+    /* stack operations */
+    OP_PUSHN,
+    OP_POPN,
+    OP_LOADL,
+    OP_STOREL,
+
     OP_PRINT,
     OP_RETURN,
 
@@ -44,8 +50,6 @@ typedef enum {
 
 extern char *op_code_str_map[OP_TYPE_LEN];
 
-#define STACK_MAX 512
-
 
 typedef struct {
     // TODO: Pool allocated or something
@@ -53,18 +57,10 @@ typedef struct {
     u32 code_offset;
 } Bytecode;
 
-typedef struct {
-    Bytecode b;
-    u8 *ip;
-
-    BytecodeWord stack[STACK_MAX];
-    u8 *sp;
-
-    BytecodeWord variables[256];
-} MetagenVM;
-
 
 Bytecode ast_to_bytecode(AstRoot *root);
-u32 bytecode_run(Bytecode b);
+void disassemble(Bytecode b);
+
+Bytecode bytecode_test(void);
 
 #endif /* BYTECODE_H */

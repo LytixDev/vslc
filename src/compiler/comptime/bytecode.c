@@ -14,7 +14,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "compiler/bytecode.h"
+#include "compiler/comptime/bytecode.h"
 #include "base/types.h"
 #include "compiler/ast.h"
 #include "compiler/type.h"
@@ -22,8 +22,8 @@
 #include <stdio.h>
 
 char *op_code_str_map[OP_TYPE_LEN] = {
-    "OP_CONSTANT", "OP_PLUS",   "OP_MINUS", "OP_STAR",   "OP_SLASH",
-    "OP_LSHIFT",   "OP_RSHIFT", "OP_PRINT", "OP_RETURN",
+    "OP_CONSTANTW", "OP_ADDW", "OP_SUBW",  "OP_MULW",   "OP_DIVW",  "OP_LSHIFT", "OP_RSHIFT",
+    "OP_PUSHN",     "OP_POPN", "OP_LOADL", "OP_STOREL", "OP_PRINT", "OP_RETURN",
 };
 
 
@@ -39,6 +39,14 @@ static void disassemble_instruction(Bytecode *b)
         b->code_offset++;
         printf(" number of args %d", n_args);
     }; break;
+    case OP_POPN:
+    case OP_PUSHN:
+    case OP_LOADL:
+    case OP_STOREL: {
+        BytecodeImm value = b->code[b->code_offset];
+        b->code_offset += sizeof(BytecodeImm);
+        printf(" %d", value);
+    }; break;
     case OP_CONSTANTW: {
         BytecodeWord value = b->code[b->code_offset];
         b->code_offset += sizeof(BytecodeWord);
@@ -49,16 +57,15 @@ static void disassemble_instruction(Bytecode *b)
     }
 }
 
-static void disassemble(Bytecode *b)
+void disassemble(Bytecode b)
 {
     printf("--- bytecode ---\n");
-    u32 code_offset_end = b->code_offset;
-    b->code_offset = 0;
-    while (b->code_offset < code_offset_end) {
-        disassemble_instruction(b);
+    u32 code_offset_end = b.code_offset;
+    b.code_offset = 0;
+    while (b.code_offset < code_offset_end) {
+        disassemble_instruction(&b);
         putchar('\n');
     }
-    b->code_offset = code_offset_end;
 }
 
 
@@ -75,21 +82,13 @@ static void writew(Bytecode *b, BytecodeWord v)
     b->code_offset += sizeof(BytecodeWord);
 }
 
-static BytecodeWord readw(MetagenVM *vm)
+static void writei(Bytecode *b, BytecodeImm v)
 {
-    BytecodeWord value = *vm->ip;
-    vm->ip += sizeof(BytecodeWord);
-    return value;
+    b->code[b->code_offset] = v;
+    b->code_offset += sizeof(BytecodeImm);
 }
 
-static u8 read_u8(MetagenVM *vm)
-{
-    u8 value = *vm->ip;
-    vm->ip++;
-    return value;
-}
-
-void ast_expr_to_bytecode(Bytecode *b, AstExpr *head)
+static void ast_expr_to_bytecode(Bytecode *b, AstExpr *head)
 {
     switch (head->kind) {
     default:
@@ -105,7 +104,7 @@ void ast_expr_to_bytecode(Bytecode *b, AstExpr *head)
     };
 }
 
-void ast_stmt_to_bytecode(Bytecode *b, AstStmt *head)
+static void ast_stmt_to_bytecode(Bytecode *b, AstStmt *head)
 {
     switch (head->kind) {
     default:
@@ -115,15 +114,26 @@ void ast_stmt_to_bytecode(Bytecode *b, AstStmt *head)
         AstBlock *block = AS_BLOCK(head);
 
         /* Make space for each local variable */
-        // b->bp = b->code_offset;
-        // SymbolTable *symt = block->symt_local;
-        // for (u32 i = 0; i < symt->sym_len; i++) {
-        // }
+        u32 var_space = 0;
+        SymbolTable *symt = block->symt_local;
+        for (u32 i = 0; i < symt->sym_len; i++) {
+            Symbol *sym = symt->symbols[i];
+            if (sym->kind == SYMBOL_LOCAL_VAR) {
+                // TODO: align?
+                var_space += type_info_bit_size(sym->type_info);
+            }
+        }
+        u32 var_space_in_words = (var_space + sizeof(BytecodeWord) - 1) / sizeof(BytecodeWord);
+        writeu8(b, OP_PUSHN);
+        writei(b, (BytecodeImm)var_space_in_words);
 
         AstList *stmt = block->stmts;
         for (AstListNode *n = stmt->head; n != NULL; n = n->next) {
             ast_stmt_to_bytecode(b, (AstStmt *)n->this);
         }
+
+        writeu8(b, OP_POPN);
+        writei(b, (BytecodeImm)var_space_in_words);
     } break;
     case STMT_PRINT: {
         AstList *stmt = AS_LIST(head);
@@ -155,102 +165,47 @@ Bytecode ast_to_bytecode(AstRoot *root)
     return ast_func_to_bytecode(AS_FUNC(root->funcs.head->this));
 }
 
-
-static Bytecode test(void)
+Bytecode bytecode_test(void)
 {
     Bytecode b = { 0 };
+
+    /*
+     * var a: s32, b: s32, c: s32
+     * a = 1
+     * b = 2
+     * c = a + b
+     * print c
+     */
+    writeu8(&b, OP_PUSHN);
+    writei(&b, 3);
+
+    // a = 1
     writeu8(&b, OP_CONSTANTW);
-    writew(&b, 3);
+    writew(&b, 1);
+    writeu8(&b, OP_STOREL);
+    writei(&b, 0);
+
+    // b = 2
     writeu8(&b, OP_CONSTANTW);
     writew(&b, 2);
+    writeu8(&b, OP_STOREL);
+    writei(&b, 1);
+
+    // c = a + b
+    writeu8(&b, OP_LOADL);
+    writei(&b, 1);
+    writeu8(&b, OP_LOADL);
+    writei(&b, 0);
     writeu8(&b, OP_ADDW);
-    writeu8(&b, OP_CONSTANTW);
-    writew(&b, 10);
-    writeu8(&b, OP_MULW);
+    writeu8(&b, OP_STOREL);
+    writei(&b, 2);
+
+    // print c
+    writeu8(&b, OP_LOADL);
+    writei(&b, 2);
     writeu8(&b, OP_PRINT);
     writeu8(&b, 1);
+
     writeu8(&b, OP_RETURN);
-    disassemble(&b);
-
     return b;
-}
-
-
-/* Stack operations */
-static void pushw(MetagenVM *vm, BytecodeWord value)
-{
-    *vm->sp = value;
-    vm->sp += sizeof(BytecodeWord);
-}
-
-static BytecodeWord popw(MetagenVM *vm)
-{
-    vm->sp -= sizeof(BytecodeWord);
-    return *vm->sp;
-}
-
-u32 bytecode_run(Bytecode b)
-{
-    // b = test();
-    MetagenVM vm = { .b = b, .ip = b.code };
-    vm.sp = (u8 *)vm.stack;
-
-    disassemble(&b);
-
-    while (1) {
-        // printf("%04ld\n", vm.ip - b.code);
-        OpCode instruction;
-        switch (instruction = *vm.ip++) {
-        case OP_CONSTANTW: {
-            BytecodeWord value = readw(&vm);
-            pushw(&vm, value);
-        }; break;
-
-        /* Binary operators */
-        case OP_ADDW:
-            pushw(&vm, popw(&vm) + popw(&vm));
-            break;
-        case OP_SUBW:
-            pushw(&vm, popw(&vm) - popw(&vm));
-            break;
-        case OP_MULW:
-            pushw(&vm, popw(&vm) * popw(&vm));
-            break;
-        case OP_DIVW:
-            pushw(&vm, popw(&vm) / popw(&vm));
-            break;
-        case OP_LSHIFT:
-            pushw(&vm, popw(&vm) << popw(&vm));
-            break;
-        case OP_RSHIFT:
-            pushw(&vm, popw(&vm) >> popw(&vm));
-            break;
-
-        case OP_PRINT: {
-            u8 n_args = read_u8(&vm);
-            /* Must first pop unto an array to maintain correct printing order */
-            BytecodeWord args[n_args];
-            for (u8 i = 0; i < n_args; i++) {
-                BytecodeWord value = popw(&vm);
-                args[i] = value;
-            }
-            for (u8 i = n_args; i > 0; i--) {
-                printf("%ld ", args[i - 1]);
-            }
-            printf("\n");
-        }; break;
-
-        case OP_RETURN: {
-            goto vm_loop_done;
-        }
-        default:
-            printf("Unknown opcode %d\n", instruction);
-            goto vm_loop_done;
-        }
-    }
-
-vm_loop_done:
-    // final = stack_pop(&vm);
-    // printf("%d\n", final);
-    return 0;
 }

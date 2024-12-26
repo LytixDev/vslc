@@ -128,11 +128,16 @@ struct symbol_t {
     Str8 name;
     TypeInfo *type_info; // @NULLABLE
     AstNode *node; // @NULLABLE. Node which defined this symbol. If NULL then defined by compiler
-    SymbolTable symt_local; // FUNC and TYPE (structs and enums) create local symbol tables
+    union {
+        SymbolTable symt_local; // FUNC and TYPE (structs and enums) create local symbol tables
+        // u32 local_var_offset; //
+    };
 };
 
 
+u32 type_info_bit_size(TypeInfo *type_info);
 Symbol *symt_find_sym(SymbolTable *symt, Str8 key);
+
 void typegen(Compiler *c, AstRoot *root);
 void infer(Compiler *c, AstRoot *root);
 void typecheck(Compiler *compiler, AstRoot *root);

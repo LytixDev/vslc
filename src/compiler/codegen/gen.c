@@ -15,11 +15,11 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "ast.h"
 #include "base/str.h"
-#include "compiler.h"
-#include "error.h"
-#include "type.h"
+#include "compiler/ast.h"
+#include "compiler/compiler.h"
+#include "compiler/error.h"
+#include "compiler/type.h"
 
 #include <stdio.h>
 
